@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>XOR-Netz zum Anfassen</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+  :root{
+    --bg: #f3f5f7;
+    --panel: #ffffff;
+    --ink: #14181c;
+    --ink-soft: #5b6572;
+    --wire-off: #c7cdd4;
+    --signal: #ff9d2e;
+    --signal-glow: #ffb85c;
+    --node-ring: #14181c;
+    --good: #1f8a5f;
+  }
+
+  *{ box-sizing: border-box; }
+
+  body{
+    margin:0;
+    background: var(--bg);
+    background-image:
+      radial-gradient(circle at 1px 1px, #dfe4e9 1px, transparent 1px);
+    background-size: 22px 22px;
+    color: var(--ink);
+    font-family: 'IBM Plex Sans', sans-serif;
+    padding: 32px 20px 60px;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+  }
+
+  h1{
+    font-family:'Space Grotesk', sans-serif;
+    font-size: clamp(22px, 3.4vw, 32px);
+    font-weight:700;
+    margin: 4px 0 2px;
+    letter-spacing: -0.01em;
+  }
+  .sub{
+    color: var(--ink-soft);
+    font-size:14px;
+    margin-bottom: 26px;
+    text-align:center;
+    max-width: 560px;
+    line-height:1.5;
+  }
+
+  .board{
+    background: var(--panel);
+    border: 1.5px solid var(--ink);
+    border-radius: 18px;
+    box-shadow: 6px 6px 0 rgba(20,24,28,0.08);
+    padding: 26px clamp(10px, 3vw, 34px) 20px;
+    width: 100%;
+    max-width: 1040px;
+    position: relative;
+  }
+
+  .stage{
+    position: relative;
+    width: 100%;
+    height: 460px;
+  }
+
+  svg.wires{
+    position:absolute;
+    inset:0;
+    width:100%;
+    height:100%;
+    overflow: visible;
+  }
+  svg.wires line{
+    stroke: var(--wire-off);
+    stroke-width: 2;
+    transition: stroke 0.25s ease, stroke-width 0.25s ease;
+  }
+  svg.wires line.active{
+    stroke: var(--signal);
+    stroke-width: 3.5;
+  }
+  svg.wires circle.pulse{
+    fill: var(--signal-glow);
+    opacity: 0;
+  }
+  svg.wires circle.pulse.run{
+    animation: travel 0.9s ease-in-out infinite;
+  }
+  @keyframes travel{
+    0%   { opacity: 0; }
+    8%   { opacity: 1; }
+    92%  { opacity: 1; }
+    100% { opacity: 0; }
+  }
+
+  .node{
+    position:absolute;
+    transform: translate(-50%, -50%);
+    text-align:center;
+  }
+  .node .circle{
+    width: 74px; height:74px;
+    border-radius:50%;
+    border: 2.5px solid var(--node-ring);
+    background: #fff;
+    display:flex; align-items:center; justify-content:center;
+    font-family:'Space Grotesk', sans-serif;
+    font-weight:700;
+    font-size: 14px;
+    transition: background 0.25s ease, box-shadow 0.25s ease, color .25s ease;
+  }
+  .node.hidden-node .circle{ width:92px; height:92px; font-size:13px;}
+  .node.output-node .circle{ width:98px; height:98px; font-size:13px;}
+  .node.on .circle{
+    background: var(--signal);
+    color:#fff;
+    box-shadow: 0 0 0 6px rgba(255,157,46,0.18);
+  }
+  .node .caption{
+    margin-top:8px;
+    font-size:11.5px;
+    color: var(--ink-soft);
+    line-height:1.35;
+    max-width:120px;
+  }
+  .node .formula{
+    margin-top:4px;
+    font-family:'IBM Plex Mono', monospace;
+    font-size:10.5px;
+    color: var(--ink-soft);
+    max-width:150px;
+    line-height:1.4;
+  }
+  .col-label{
+    position:absolute;
+    top: 0px;
+    font-size:12px;
+    font-weight:600;
+    letter-spacing:0.03em;
+    text-transform:uppercase;
+    color: var(--ink-soft);
+    transform: translateX(-50%);
+    text-align:center;
+    width: 160px;
+  }
+
+  .toggle-btn{
+    width:74px; height:74px;
+    border-radius:50%;
+    border:2.5px solid var(--node-ring);
+    background:#fff;
+    cursor:pointer;
+    font-family:'Space Grotesk', sans-serif;
+    font-weight:700;
+    font-size:20px;
+    color: var(--ink);
+    transition: background 0.2s ease, color 0.2s ease, transform 0.15s ease;
+  }
+  .toggle-btn:hover{ transform: scale(1.05); }
+  .toggle-btn:active{ transform: scale(0.96); }
+  .toggle-btn.on{
+    background: var(--signal);
+    color:#fff;
+    box-shadow: 0 0 0 6px rgba(255,157,46,0.18);
+  }
+
+  .result-box{
+    position:absolute;
+    transform: translate(-50%, -50%);
+    text-align:center;
+  }
+  .result-circle{
+    width: 110px; height:110px;
+    border-radius:50%;
+    border: 3px solid var(--node-ring);
+    background:#fff;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    transition: background .25s ease, color .25s ease, box-shadow .25s ease;
+  }
+  .result-circle .big{
+    font-family:'Space Grotesk', sans-serif;
+    font-weight:700;
+    font-size: 40px;
+    line-height:1;
+  }
+  .result-circle .small{
+    font-size:10px;
+    letter-spacing:0.04em;
+    text-transform:uppercase;
+    margin-top:4px;
+  }
+  .result-circle.on{
+    background: var(--good);
+    color:#fff;
+    box-shadow: 0 0 0 8px rgba(31,138,95,0.15);
+  }
+  .result-caption{
+    margin-top:10px;
+    font-size:12px;
+    color: var(--ink-soft);
+    max-width: 150px;
+  }
+
+  .table-wrap{
+    margin-top: 18px;
+    display:flex;
+    justify-content:center;
+  }
+  table{
+    border-collapse: collapse;
+    font-family:'IBM Plex Mono', monospace;
+    font-size: 12.5px;
+  }
+  th, td{
+    border: 1.5px solid var(--ink);
+    padding: 6px 14px;
+    text-align:center;
+  }
+  th{
+    background: var(--ink);
+    color:#fff;
+    font-weight:500;
+    font-size:11px;
+    text-transform:uppercase;
+    letter-spacing:0.03em;
+  }
+  tr.current-row td{
+    background: rgba(255,157,46,0.14);
+    font-weight:600;
+  }
+
+  .legend{
+    display:flex;
+    gap: 22px;
+    flex-wrap:wrap;
+    justify-content:center;
+    margin-top: 18px;
+    font-size:12px;
+    color: var(--ink-soft);
+  }
+  .legend span.dot{
+    display:inline-block;
+    width:9px;height:9px;
+    border-radius:50%;
+    margin-right:6px;
+    vertical-align:middle;
+  }
+  .legend .dot.off{ background: var(--wire-off); }
+  .legend .dot.onc{ background: var(--signal); }
+
+  @media (max-width: 720px){
+    .stage{ height: 620px; }
+  }
+</style>
+</head>
+<body>
+
+  <h1>Wie zwei Schichten das XOR-Problem lösen</h1>
+  <p class="sub">Schalte x1 und x2 um und beobachte live, wie das Signal durch die versteckte Schicht bis zum Ergebnis läuft.</p>
+
+  <div class="board">
+    <div class="stage" id="stage">
+      <svg class="wires" id="wires"></svg>
+
+      <div class="col-label" id="lbl-in" style="left:9%;">Eingaben</div>
+      <div class="col-label" id="lbl-hidden" style="left:40%;">Versteckte Schicht</div>
+      <div class="col-label" id="lbl-out" style="left:68%;">Ausgabeschicht</div>
+      <div class="col-label" id="lbl-res" style="left:90%;">Ergebnis</div>
+
+      <!-- Inputs -->
+      <div class="node" id="node-x1" style="left:9%; top:28%;">
+        <button class="toggle-btn" id="btn-x1">0</button>
+        <div class="caption">x1</div>
+      </div>
+      <div class="node" id="node-x2" style="left:9%; top:72%;">
+        <button class="toggle-btn" id="btn-x2">0</button>
+        <div class="caption">x2</div>
+      </div>
+
+      <!-- Hidden layer -->
+      <div class="node hidden-node" id="node-or" style="left:40%; top:20%;">
+        <div class="circle" id="circ-or">ODER</div>
+        <div class="caption">mind. eine Eingabe ist 1?</div>
+        <div class="formula" id="f-or"></div>
+      </div>
+      <div class="node hidden-node" id="node-nand" style="left:40%; top:80%;">
+        <div class="circle" id="circ-nand">NICHT-UND</div>
+        <div class="caption">sind nicht beide 1?</div>
+        <div class="formula" id="f-nand"></div>
+      </div>
+
+      <!-- Output layer -->
+      <div class="node output-node" id="node-and" style="left:68%; top:50%;">
+        <div class="circle" id="circ-and">UND</div>
+        <div class="caption">sind beide Teilfragen 1?</div>
+        <div class="formula" id="f-and"></div>
+      </div>
+
+      <!-- Result -->
+      <div class="result-box" id="node-y" style="left:90%; top:50%;">
+        <div class="result-circle" id="circ-y">
+          <div class="big" id="y-val">0</div>
+          <div class="small">y</div>
+        </div>
+        <div class="result-caption">Ergebnis (XOR)</div>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <table id="truth-table">
+        <thead>
+          <tr><th>x1</th><th>x2</th><th>XOR</th></tr>
+        </thead>
+        <tbody>
+          <tr data-x1="0" data-x2="0"><td>0</td><td>0</td><td>0</td></tr>
+          <tr data-x1="0" data-x2="1"><td>0</td><td>1</td><td>1</td></tr>
+          <tr data-x1="1" data-x2="0"><td>1</td><td>0</td><td>1</td></tr>
+          <tr data-x1="1" data-x2="1"><td>1</td><td>1</td><td>0</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="legend">
+      <div><span class="dot off"></span>Leitung ruht (0)</div>
+      <div><span class="dot onc"></span>Leitung führt Signal (1)</div>
+    </div>
+  </div>
+
+<script>
+  const state = { x1: 0, x2: 0 };
+
+  const wOr = [1.0, 1.0], tOr = 0.5;
+  const wNand = [-1.0, -1.0], tNand = -1.5;
+  const wAnd = [1.0, 1.0], tAnd = 1.5;
+
+  function neuron(inputs, weights, threshold){
+    let sum = 0;
+    for(let i=0;i<inputs.length;i++) sum += inputs[i]*weights[i];
+    return { sum, fires: sum > threshold ? 1 : 0 };
+  }
+
+  const stage = document.getElementById('stage');
+  const svg = document.getElementById('wires');
+
+  const nodeIds = ['node-x1','node-x2','node-or','node-nand','node-and','node-y'];
+
+  function getCenter(id){
+    const el = document.getElementById(id);
+    const stageRect = stage.getBoundingClientRect();
+    const r = el.getBoundingClientRect();
+    return {
+      x: r.left + r.width/2 - stageRect.left,
+      y: r.top + r.height/2 - stageRect.top
+    };
+  }
+
+  let wireDefs = [];
+
+  function buildWires(){
+    svg.innerHTML = '';
+    wireDefs = [
+      { from:'node-x1', to:'node-or',   key:'x1-or' },
+      { from:'node-x1', to:'node-nand', key:'x1-nand' },
+      { from:'node-x2', to:'node-or',   key:'x2-or' },
+      { from:'node-x2', to:'node-nand', key:'x2-nand' },
+      { from:'node-or', to:'node-and',  key:'or-and' },
+      { from:'node-nand', to:'node-and',key:'nand-and' },
+      { from:'node-and', to:'node-y',   key:'and-y' },
+    ];
+    wireDefs.forEach(w => {
+      const a = getCenter(w.from);
+      const b = getCenter(w.to);
+      const ns = 'http://www.w3.org/2000/svg';
+      const line = document.createElementNS(ns,'line');
+      line.setAttribute('x1', a.x); line.setAttribute('y1', a.y);
+      line.setAttribute('x2', b.x); line.setAttribute('y2', b.y);
+      line.setAttribute('id', 'line-'+w.key);
+      svg.appendChild(line);
+
+      const pulse = document.createElementNS(ns,'circle');
+      pulse.setAttribute('r', 5);
+      pulse.setAttribute('class','pulse');
+      pulse.setAttribute('id', 'pulse-'+w.key);
+      svg.appendChild(pulse);
+      pulse.dataset.x1 = a.x; pulse.dataset.y1 = a.y;
+      pulse.dataset.x2 = b.x; pulse.dataset.y2 = b.y;
+    });
+  }
+
+  function setWire(key, active){
+    const line = document.getElementById('line-'+key);
+    const pulse = document.getElementById('pulse-'+key);
+    if(!line) return;
+    line.classList.toggle('active', !!active);
+    if(active){
+      pulse.classList.add('run');
+      pulse.setAttribute('cx', pulse.dataset.x1);
+      pulse.setAttribute('cy', pulse.dataset.y1);
+      animatePulse(pulse);
+    } else {
+      pulse.classList.remove('run');
+    }
+  }
+
+  let pulseAnims = {};
+  function animatePulse(pulse){
+    const id = pulse.id;
+    if(pulseAnims[id]) cancelAnimationFrame(pulseAnims[id]);
+    const x1 = parseFloat(pulse.dataset.x1), y1 = parseFloat(pulse.dataset.y1);
+    const x2 = parseFloat(pulse.dataset.x2), y2 = parseFloat(pulse.dataset.y2);
+    const duration = 900;
+    let start = null;
+    function step(ts){
+      if(!pulse.classList.contains('run')) return;
+      if(!start) start = ts;
+      let t = ((ts - start) % duration) / duration;
+      const cx = x1 + (x2-x1)*t;
+      const cy = y1 + (y2-y1)*t;
+      pulse.setAttribute('cx', cx);
+      pulse.setAttribute('cy', cy);
+      pulseAnims[id] = requestAnimationFrame(step);
+    }
+    pulseAnims[id] = requestAnimationFrame(step);
+  }
+
+  function fmt(n){
+    return Number.isInteger(n) ? n.toFixed(1) : n.toString();
+  }
+
+  function render(){
+    const { x1, x2 } = state;
+
+    document.getElementById('btn-x1').textContent = x1;
+    document.getElementById('btn-x2').textContent = x2;
+    document.getElementById('btn-x1').classList.toggle('on', x1===1);
+    document.getElementById('btn-x2').classList.toggle('on', x2===1);
+
+    const orRes = neuron([x1,x2], wOr, tOr);
+    const nandRes = neuron([x1,x2], wNand, tNand);
+    const andRes = neuron([orRes.fires, nandRes.fires], wAnd, tAnd);
+
+    document.getElementById('node-or').classList.toggle('on', orRes.fires===1);
+    document.getElementById('node-nand').classList.toggle('on', nandRes.fires===1);
+    document.getElementById('node-and').classList.toggle('on', andRes.fires===1);
+    document.getElementById('circ-y').classList.toggle('on', andRes.fires===1);
+    document.getElementById('y-val').textContent = andRes.fires;
+
+    document.getElementById('f-or').textContent =
+      `${x1}×${fmt(wOr[0])} + ${x2}×${fmt(wOr[1])} = ${fmt(orRes.sum)} ${orRes.fires? '>':'≤'} ${fmt(tOr)} → ${orRes.fires}`;
+    document.getElementById('f-nand').textContent =
+      `${x1}×${fmt(wNand[0])} + ${x2}×${fmt(wNand[1])} = ${fmt(nandRes.sum)} ${nandRes.fires? '>':'≤'} ${fmt(tNand)} → ${nandRes.fires}`;
+    document.getElementById('f-and').textContent =
+      `${orRes.fires}×${fmt(wAnd[0])} + ${nandRes.fires}×${fmt(wAnd[1])} = ${fmt(andRes.sum)} ${andRes.fires? '>':'≤'} ${fmt(tAnd)} → ${andRes.fires}`;
+
+    setWire('x1-or', x1===1);
+    setWire('x1-nand', x1===1);
+    setWire('x2-or', x2===1);
+    setWire('x2-nand', x2===1);
+    setWire('or-and', orRes.fires===1);
+    setWire('nand-and', nandRes.fires===1);
+    setWire('and-y', andRes.fires===1);
+
+    document.querySelectorAll('#truth-table tbody tr').forEach(tr => {
+      const match = parseInt(tr.dataset.x1)===x1 && parseInt(tr.dataset.x2)===x2;
+      tr.classList.toggle('current-row', match);
+    });
+  }
+
+  document.getElementById('btn-x1').addEventListener('click', () => {
+    state.x1 = state.x1 === 1 ? 0 : 1;
+    render();
+  });
+  document.getElementById('btn-x2').addEventListener('click', () => {
+    state.x2 = state.x2 === 1 ? 0 : 1;
+    render();
+  });
+
+  window.addEventListener('resize', () => { buildWires(); render(); });
+
+  buildWires();
+  render();
+</script>
+
+</body>
+</html>

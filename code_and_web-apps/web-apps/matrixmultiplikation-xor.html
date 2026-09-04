@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Matrixmultiplikation im XOR-Netz</title>
+  <style>
+    :root { color-scheme: light dark; --bg:#f7f8fc; --panel:#fff; --ink:#18202d; --muted:#5d6879; --line:#d8dee9; --accent:#315efb; --accent-soft:#e8edff; --good:#087c55; --good-soft:#e1f5ed; --warn:#a84d00; --warn-soft:#fff0df; }
+    @media (prefers-color-scheme: dark) { :root { --bg:#10131a; --panel:#191e28; --ink:#edf1f8; --muted:#aab5c6; --line:#353d4b; --accent:#9bb2ff; --accent-soft:#242e50; --good:#69d9ae; --good-soft:#163b31; --warn:#ffbd78; --warn-soft:#482d19; } }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.5 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    main { max-width:1120px; margin:auto; padding:32px 20px 52px; }
+    h1 { margin:0 0 6px; font-size:clamp(1.7rem,4vw,2.5rem); line-height:1.15; }
+    h2 { font-size:1.14rem; margin:0 0 14px; } p { margin:8px 0; } .lead { color:var(--muted); max-width:780px; }
+    .grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; margin:22px 0; }
+    .card { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:18px; }
+    .controls { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+    label { display:grid; gap:4px; color:var(--muted); font-size:.9rem; } input { width:100%; border:1px solid var(--line); border-radius:8px; padding:8px; color:var(--ink); background:var(--bg); font:inherit; }
+    button { border:1px solid var(--line); border-radius:8px; padding:9px 12px; background:var(--panel); color:var(--ink); font:inherit; cursor:pointer; } button:hover { border-color:var(--accent); } button.active { background:var(--accent); color:white; border-color:var(--accent); }
+    .step-buttons { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:14px; }
+    .formula { display:flex; flex-wrap:wrap; align-items:center; gap:10px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:1.08rem; }
+    .matrix { display:inline-grid; grid-template-columns:repeat(2,auto); gap:4px; padding:8px 14px; position:relative; vertical-align:middle; }
+    .matrix::before,.matrix::after { content:""; position:absolute; top:2px; bottom:2px; width:8px; border-color:var(--ink); } .matrix::before { left:0; border-left:2px solid; border-top:2px solid; border-bottom:2px solid; } .matrix::after { right:0; border-right:2px solid; border-top:2px solid; border-bottom:2px solid; }
+    .cell { min-width:42px; text-align:center; padding:5px; border-radius:6px; } .cell.active { background:var(--accent-soft); color:var(--ink); outline:2px solid var(--accent); }
+    .matrix.vector { grid-template-columns:auto; } .matrix.result { grid-template-columns:auto; } .op { font-size:1.4rem; color:var(--muted); }
+    .explanation { margin-top:14px; padding:13px; background:var(--accent-soft); border-radius:10px; } .result { font-size:1.25rem; font-weight:650; } .badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:.88rem; background:var(--good-soft); color:var(--good); font-weight:650; }
+    table { width:100%; border-collapse:collapse; } th,td { padding:10px 8px; text-align:left; border-bottom:1px solid var(--line); } th { color:var(--muted); font-weight:600; } tr.focus { background:var(--accent-soft); } .note { color:var(--muted); font-size:.94rem; }
+    .code { background:var(--bg); border:1px solid var(--line); border-radius:10px; padding:13px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; overflow:auto; white-space:pre-wrap; }
+    @media (max-width:720px) { .grid { grid-template-columns:1fr; } main { padding:22px 14px 38px; } .controls { grid-template-columns:1fr 1fr; } }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>So ersetzt NumPy die Schleifen</h1>
+    <p class="lead">Die versteckte Schicht deines XOR-Netzes besteht aus zwei Neuronen. Jedes Neuron erhält dieselben zwei Eingaben. NumPy berechnet beide gewichteten Summen gleichzeitig mit <code>gewichte_matrix @ eingaben</code>.</p>
+
+    <section class="grid" aria-label="Einstellungen und Ergebnis">
+      <div class="card">
+        <h2>1. Werte verändern</h2>
+        <div class="controls">
+          <label>Eingabe x₁ <input id="x1" type="number" value="1" step="1"></label>
+          <label>Eingabe x₂ <input id="x2" type="number" value="0" step="1"></label>
+          <label>ODER: Gewicht w₁ <input id="w11" type="number" value="1" step="0.1"></label>
+          <label>ODER: Gewicht w₂ <input id="w12" type="number" value="1" step="0.1"></label>
+          <label>NICHT-UND: Gewicht w₁ <input id="w21" type="number" value="-1" step="0.1"></label>
+          <label>NICHT-UND: Gewicht w₂ <input id="w22" type="number" value="-1" step="0.1"></label>
+          <label>ODER: Schwellenwert <input id="t1" type="number" value="0.5" step="0.1"></label>
+          <label>NICHT-UND: Schwellenwert <input id="t2" type="number" value="-1.5" step="0.1"></label>
+        </div>
+      </div>
+      <div class="card">
+        <h2>2. Versteckte Schicht</h2>
+        <p>Die Matrix hat <strong>eine Zeile je Neuron</strong>. Jede Zeile enthält dessen Gewichte.</p>
+        <div id="results" aria-live="polite"></div>
+        <p class="note">Die Aktivierung ist exakt wie im Code: <code>summe &gt; schwellenwert</code>. Bei Gleichheit ist die Ausgabe 0.</p>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>3. Die Matrixmultiplikation, Schritt für Schritt</h2>
+      <div class="step-buttons" role="group" aria-label="Berechnungsschritt auswählen">
+        <button class="active" data-step="0">Übersicht</button>
+        <button data-step="1">Zeile 1 · ODER</button>
+        <button data-step="2">Zeile 2 · NICHT-UND</button>
+      </div>
+      <div class="formula" id="matrixFormula" aria-label="Matrixmultiplikation"></div>
+      <div class="explanation" id="stepText"></div>
+    </section>
+
+    <section class="grid">
+      <div class="card">
+        <h2>Was die Schleifen tun</h2>
+        <div class="code">für jedes Neuron:
+  summe = 0
+  für jede Eingabe:
+    summe += eingabe × gewicht
+  ausgabe = summe &gt; schwellenwert</div>
+      </div>
+      <div class="card">
+        <h2>Was <code>@</code> tut</h2>
+        <div class="code">summen = gewichte_matrix @ eingaben
+ausgaben = (summen &gt; schwellenwerte).astype(int)</div>
+        <p class="note">Das Ergebnis der Matrixmultiplikation ist ein Vektor: eine Summe pro Zeile bzw. pro Neuron.</p>
+      </div>
+    </section>
+
+    <section class="card" style="margin-top:16px">
+      <h2>Kontrolle: beide Wege liefern dieselben Summen</h2>
+      <table><thead><tr><th>Neuron</th><th>Schleifen: gewichtete Summe</th><th>Matrixmultiplikation</th><th>Schwelle</th><th>Ausgabe</th></tr></thead><tbody id="tableBody"></tbody></table>
+    </section>
+  </main>
+  <script>
+    const ids = ['x1','x2','w11','w12','w21','w22','t1','t2'];
+    let step = 0;
+    const n = id => Number(document.getElementById(id).value) || 0;
+    const fmt = value => Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/0+$/, '').replace(/\.$/, '');
+    const mat = (values, cls='', activeRow=-1) => `<span class="matrix ${cls}">${values.map((row,r) => (Array.isArray(row)?row:[row]).map(v => `<span class="cell ${r===activeRow?'active':''}">${fmt(v)}</span>`).join('')).join('')}</span>`;
+    function update() {
+      const x = [n('x1'),n('x2')], w = [[n('w11'),n('w12')],[n('w21'),n('w22')]], t = [n('t1'),n('t2')];
+      const sums = w.map(row => row[0]*x[0] + row[1]*x[1]);
+      const out = sums.map((sum,i) => sum > t[i] ? 1 : 0);
+      document.getElementById('results').innerHTML = `<p class="result">Summen: [${sums.map(fmt).join(', ')}]</p><p class="result">Ausgaben: <span class="badge">[${out.join(', ')}]</span></p>`;
+      const focus = step === 0 ? -1 : step-1;
+      document.getElementById('matrixFormula').innerHTML = `${mat(w,'',focus)} <span class="op">@</span> ${mat(x,'vector')} <span class="op">=</span> ${mat(sums,'result',focus)}`;
+      let text;
+      if (step === 0) text = `Jede Matrixzeile wird mit dem Eingabevektor verrechnet. Deshalb entstehen zwei Werte: <strong>${fmt(sums[0])}</strong> für ODER und <strong>${fmt(sums[1])}</strong> für NICHT-UND.`;
+      else { const i=focus, name=i===0?'ODER':'NICHT-UND'; text = `<strong>${name}:</strong> (${fmt(w[i][0])} × ${fmt(x[0])}) + (${fmt(w[i][1])} × ${fmt(x[1])}) = <strong>${fmt(sums[i])}</strong>. ${fmt(sums[i])} &gt; ${fmt(t[i])} ist <strong>${out[i]===1?'wahr → Ausgabe 1':'falsch → Ausgabe 0'}</strong>.`; }
+      document.getElementById('stepText').innerHTML = text;
+      document.getElementById('tableBody').innerHTML = w.map((row,i) => `<tr class="${focus===i?'focus':''}"><td>${i===0?'ODER':'NICHT-UND'}</td><td>(${fmt(row[0])} × ${fmt(x[0])}) + (${fmt(row[1])} × ${fmt(x[1])}) = ${fmt(sums[i])}</td><td>${fmt(sums[i])}</td><td>${fmt(t[i])}</td><td><strong>${out[i]}</strong></td></tr>`).join('');
+    }
+    ids.forEach(id => document.getElementById(id).addEventListener('input', update));
+    document.querySelectorAll('[data-step]').forEach(button => button.addEventListener('click', () => { step=Number(button.dataset.step); document.querySelectorAll('[data-step]').forEach(b=>b.classList.toggle('active', b===button)); update(); }));
+    update();
+  </script>
+</body>
+</html>
