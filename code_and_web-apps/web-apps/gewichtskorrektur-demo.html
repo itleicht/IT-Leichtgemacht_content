@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wie das Netz seine Gewichte korrigiert</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #EAF0EE;
+    --panel: #FBFDFC;
+    --ink: #16232A;
+    --ink-soft: #4B6062;
+    --line: #C9DAD5;
+    --accent: #B4531F;
+    --accent-soft: #E9CBB6;
+    --active: #1F6F5C;
+    --active-soft: #CFE7DF;
+    --inactive: #5B4B99;
+    --inactive-soft: #DCD5EE;
+    --warn: #B98A1E;
+    --warn-soft: #F0DFB6;
+    --radius: 14px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'Sora', sans-serif;
+    line-height: 1.5;
+    padding: 40px 20px 80px;
+  }
+  .wrap { max-width: 1020px; margin: 0 auto; }
+  header h1 {
+    font-size: clamp(1.6rem, 3.4vw, 2.3rem);
+    font-weight: 700;
+    margin: 0 0 10px;
+    letter-spacing: -0.01em;
+  }
+  header p { color: var(--ink-soft); max-width: 66ch; font-size: 1.02rem; margin: 0 0 36px; }
+  h2 { font-size: 1.25rem; font-weight: 600; margin: 0 0 6px; }
+  .kicker { font-size: 0.85rem; color: var(--ink-soft); margin: 0 0 22px; }
+  section + section { margin-top: 52px; padding-top: 40px; border-top: 1px solid var(--line); }
+
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; }
+  .stage { display: grid; grid-template-columns: 1fr 1.15fr; gap: 28px; align-items: start; }
+
+  .chart-block + .chart-block { margin-top: 6px; }
+  .chart-label { font-size: 0.8rem; color: var(--ink-soft); margin-bottom: 4px; font-family: 'JetBrains Mono', monospace; }
+  svg.chart { width: 100%; height: auto; display: block; }
+
+  .callout {
+    margin-top: 16px;
+    padding: 14px 16px;
+    border-radius: var(--radius);
+    border: 1px solid var(--warn-soft);
+    background: #FCF6E7;
+    font-size: 0.92rem;
+    color: #6B4E10;
+    transition: background 0.25s ease, border-color 0.25s ease, color 0.25s ease;
+  }
+  .callout.calm { background: #EAF5F1; border-color: var(--active-soft); color: #14493C; }
+
+  .code-note {
+    margin-top: 16px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.82rem;
+    background: #F2F6F4;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 12px 14px;
+    color: var(--ink-soft);
+  }
+  .code-note b { color: var(--accent); }
+
+  .controls .row { margin-bottom: 18px; }
+  .controls label { display: flex; justify-content: space-between; font-size: 0.92rem; font-weight: 500; margin-bottom: 8px; }
+  .controls label .val { font-family: 'JetBrains Mono', monospace; color: var(--accent); font-weight: 500; }
+
+  input[type="range"] {
+    -webkit-appearance: none; width: 100%; height: 4px;
+    background: var(--line); border-radius: 4px; outline: none;
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 18px; height: 18px; border-radius: 50%;
+    background: var(--accent); border: 3px solid var(--panel);
+    box-shadow: 0 0 0 1px var(--accent); cursor: pointer;
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 18px; height: 18px; border-radius: 50%;
+    background: var(--accent); border: 3px solid var(--panel);
+    box-shadow: 0 0 0 1px var(--accent); cursor: pointer;
+  }
+
+  .switch-row {
+    display: flex; align-items: center; justify-content: space-between;
+    background: #F2F6F4; border: 1px solid var(--line); border-radius: 10px;
+    padding: 10px 14px; margin-bottom: 20px;
+  }
+  .switch-row span { font-size: 0.92rem; font-weight: 500; }
+  .switch { position: relative; width: 46px; height: 26px; flex-shrink: 0; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .slider-track {
+    position: absolute; inset: 0; background: var(--inactive); border-radius: 999px;
+    cursor: pointer; transition: background 0.2s ease;
+  }
+  .slider-track::before {
+    content: ""; position: absolute; width: 20px; height: 20px; left: 3px; top: 3px;
+    background: #fff; border-radius: 50%; transition: transform 0.2s ease;
+  }
+  .switch input:checked + .slider-track { background: var(--active); }
+  .switch input:checked + .slider-track::before { transform: translateX(20px); }
+
+  .trace { margin-top: 6px; }
+  .trace-row {
+    display: grid; grid-template-columns: 92px 1fr; gap: 12px;
+    padding: 9px 0; border-bottom: 1px solid var(--line);
+    font-size: 0.86rem; align-items: baseline;
+  }
+  .trace-row:last-child { border-bottom: none; }
+  .trace-row .step-name { color: var(--ink-soft); font-weight: 500; }
+  .trace-row .eq { font-family: 'JetBrains Mono', monospace; }
+  .trace-row .eq .result { color: var(--accent); font-weight: 600; }
+
+  .compare {
+    margin-top: 20px;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
+  }
+  .compare .card {
+    border-radius: 10px; padding: 14px; border: 1px solid var(--line); background: #F2F6F4;
+  }
+  .compare .card.on { border-color: var(--active-soft); background: var(--active-soft); }
+  .compare .card h4 { margin: 0 0 8px; font-size: 0.82rem; color: var(--ink-soft); font-weight: 600; }
+  .compare .card .num { font-family: 'JetBrains Mono', monospace; font-size: 1.05rem; font-weight: 600; }
+  .compare .card .sub { font-family: 'JetBrains Mono', monospace; font-size: 0.82rem; color: var(--ink-soft); margin-top: 4px; }
+
+  @media (max-width: 800px) {
+    .stage, .compare { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>Wie das Netz seine Gewichte korrigiert</h1>
+    <p>Jede Gewichtsanpassung in Folge 9 hängt von einer einzigen Zahl ab: der Steigung der Sigmoid-Kurve genau an der Stelle, an der dein Neuron gerade steht. Stell unten die Werte selbst ein und beobachte, wie diese Steigung in die Korrektur-Formel einfließt.</p>
+  </header>
+
+  <section id="steigung">
+    <h2>Die Steigung entscheidet, wie stark korrigiert wird</h2>
+    <p class="kicker">z = w·x + b ist die Position auf der Kurve. Die Ableitung an dieser Stelle sagt: Wie stark reagiert die Ausgabe a, wenn sich z ein bisschen ändert?</p>
+
+    <div class="panel">
+      <div class="chart-block">
+        <div class="chart-label">a = sigmoid(z)</div>
+        <svg class="chart" id="chart-sigmoid" viewBox="0 0 460 170"></svg>
+      </div>
+      <div class="chart-block">
+        <div class="chart-label">sigmoid_ableitung(a) = a·(1−a)</div>
+        <svg class="chart" id="chart-deriv" viewBox="0 0 460 170"></svg>
+      </div>
+      <div class="callout" id="steigung-callout"></div>
+    </div>
+  </section>
+
+  <section id="korrektur">
+    <h2>Die Korrektur-Formel, Schritt für Schritt</h2>
+    <p class="kicker">Ein einzelnes Trainingsbeispiel, genau wie in der Trainingsschleife aus Folge 9 – nur diesmal in Zeitlupe.</p>
+
+    <div class="stage">
+      <div class="panel controls">
+        <div class="switch-row">
+          <span id="target-label">Ziel t = 1</span>
+          <label class="switch">
+            <input type="checkbox" id="target-toggle" checked>
+            <span class="slider-track"></span>
+          </label>
+        </div>
+        <div class="row">
+          <label>x (Eingabe) <span class="val" id="x-val"></span></label>
+          <input type="range" id="x" min="0" max="1" step="0.1" value="1">
+        </div>
+        <div class="row">
+          <label>w (Gewicht) <span class="val" id="w-val"></span></label>
+          <input type="range" id="w" min="-4" max="4" step="0.1" value="2">
+        </div>
+        <div class="row">
+          <label>b (Bias) <span class="val" id="b-val"></span></label>
+          <input type="range" id="b" min="-4" max="4" step="0.1" value="-1">
+        </div>
+        <div class="row">
+          <label>lernrate <span class="val" id="lr-val"></span></label>
+          <input type="range" id="lr" min="0.1" max="1.5" step="0.1" value="0.5">
+        </div>
+
+        <div class="code-note">
+          Code: <b>korrektur_ausgabe = fehler_ausgabe * sigmoid_ableitung(ausgabe)</b><br>
+          Weil sigmoid_ableitung(x) = x·(1−x) ist, reicht die schon berechnete Aktivierung „ausgabe" – die Sigmoid-Funktion muss dafür kein zweites Mal aufgerufen werden.
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="trace" id="trace"></div>
+
+        <div class="compare">
+          <div class="card" id="card-mit">
+            <h4>Mit Ableitung (echte Formel)</h4>
+            <div class="num" id="korrektur-mit"></div>
+            <div class="sub" id="dw-mit"></div>
+          </div>
+          <div class="card" id="card-ohne">
+            <h4>Ohne Ableitung (nur Fehler)</h4>
+            <div class="num" id="korrektur-ohne"></div>
+            <div class="sub" id="dw-ohne"></div>
+          </div>
+        </div>
+
+        <div class="callout" id="korrektur-callout"></div>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<script>
+(function () {
+  function sigmoid(z) { return 1 / (1 + Math.exp(-z)); }
+
+  // ---- chart geometry (shared between both stacked charts) ----
+  const zMin = -6, zMax = 6, zRange = zMax - zMin;
+  const M = { left: 34, right: 10, top: 10, bottom: 22 };
+  const W = 460 - M.left - M.right;
+  const H = 170 - M.top - M.bottom;
+
+  function sx(z) { return M.left + (z - zMin) / zRange * W; }
+  function syTop(a) { return M.top + H - a * H; }          // a in [0,1]
+  function syBot(d) { return M.top + H - (d / 0.25) * H; } // d in [0,0.25]
+
+  function buildStaticChart(svg, yTicks, yTickLabels, syFn, curvePath, curveColor) {
+    const ns = 'http://www.w3.org/2000/svg';
+    function el(tag, attrs) {
+      const e = document.createElementNS(ns, tag);
+      for (const k in attrs) e.setAttribute(k, attrs[k]);
+      return e;
+    }
+    // gridlines + z labels
+    [-6, -3, 0, 3, 6].forEach(z => {
+      svg.appendChild(el('line', { x1: sx(z), y1: M.top, x2: sx(z), y2: M.top + H, stroke: '#DCE7E3', 'stroke-width': z === 0 ? 1.4 : 1 }));
+      svg.appendChild(el('text', { x: sx(z), y: M.top + H + 15, 'text-anchor': 'middle', 'font-size': 10, fill: '#4B6062', 'font-family': 'JetBrains Mono, monospace' })).textContent = z;
+    });
+    yTicks.forEach((yv, i) => {
+      const y = syFn(yv);
+      svg.appendChild(el('line', { x1: M.left, y1: y, x2: M.left + W, y2: y, stroke: '#DCE7E3', 'stroke-width': 1 }));
+      svg.appendChild(el('text', { x: M.left - 6, y: y + 3, 'text-anchor': 'end', 'font-size': 10, fill: '#4B6062', 'font-family': 'JetBrains Mono, monospace' })).textContent = yTickLabels[i];
+    });
+    svg.appendChild(el('path', { d: curvePath, fill: 'none', stroke: curveColor, 'stroke-width': 2.2 }));
+  }
+
+  // build static sigmoid + derivative curve paths
+  let sigPath = '', derPath = '';
+  for (let i = 0; i <= 60; i++) {
+    const z = zMin + (i / 60) * zRange;
+    const a = sigmoid(z);
+    const d = a * (1 - a);
+    const cmd = i === 0 ? 'M' : 'L';
+    sigPath += `${cmd}${sx(z).toFixed(1)},${syTop(a).toFixed(1)} `;
+    derPath += `${cmd}${sx(z).toFixed(1)},${syBot(d).toFixed(1)} `;
+  }
+
+  const svgSig = document.getElementById('chart-sigmoid');
+  const svgDer = document.getElementById('chart-deriv');
+  buildStaticChart(svgSig, [0, 0.5, 1], ['0', '0.5', '1'], syTop, sigPath, '#1F6F5C');
+  buildStaticChart(svgDer, [0, 0.125, 0.25], ['0', '.125', '.25'], syBot, derPath, '#B4531F');
+
+  // dynamic markers: guide line, point, tangent (top), point (bottom)
+  const ns = 'http://www.w3.org/2000/svg';
+  function el(tag, attrs) {
+    const e = document.createElementNS(ns, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    return e;
+  }
+  const guideTop = el('line', { stroke: '#93A9A5', 'stroke-width': 1, 'stroke-dasharray': '3,3' });
+  const tangent = el('line', { stroke: '#B4531F', 'stroke-width': 2 });
+  const dotTop = el('circle', { r: 5, fill: '#1F6F5C', stroke: '#fff', 'stroke-width': 1.5 });
+  svgSig.appendChild(guideTop); svgSig.appendChild(tangent); svgSig.appendChild(dotTop);
+
+  const guideBot = el('line', { stroke: '#93A9A5', 'stroke-width': 1, 'stroke-dasharray': '3,3' });
+  const dotBot = el('circle', { r: 5, fill: '#B4531F', stroke: '#fff', 'stroke-width': 1.5 });
+  svgDer.appendChild(guideBot); svgDer.appendChild(dotBot);
+
+  // ---- controls ----
+  const elx = document.getElementById('x'), elw = document.getElementById('w'),
+        elb = document.getElementById('b'), ellr = document.getElementById('lr'),
+        elt = document.getElementById('target-toggle');
+  const xVal = document.getElementById('x-val'), wVal = document.getElementById('w-val'),
+        bVal = document.getElementById('b-val'), lrVal = document.getElementById('lr-val'),
+        tLabel = document.getElementById('target-label');
+  const trace = document.getElementById('trace');
+  const steigungCallout = document.getElementById('steigung-callout');
+  const korrekturCallout = document.getElementById('korrektur-callout');
+
+  function f3(n) { return n.toFixed(3); }
+
+  function render() {
+    const x = parseFloat(elx.value), w = parseFloat(elw.value), b = parseFloat(elb.value);
+    const lr = parseFloat(ellr.value), t = elt.checked ? 1 : 0;
+
+    xVal.textContent = x.toFixed(1);
+    wVal.textContent = w.toFixed(1);
+    bVal.textContent = b.toFixed(1);
+    lrVal.textContent = lr.toFixed(1);
+    tLabel.textContent = `Ziel t = ${t}`;
+
+    const z = w * x + b;
+    const a = sigmoid(z);
+    const fehler = t - a;
+    const ableitung = a * (1 - a);
+    const korrekturMit = fehler * ableitung;
+    const korrekturOhne = fehler;
+    const dwMit = x * korrekturMit * lr, dbMit = korrekturMit * lr;
+    const dwOhne = x * korrekturOhne * lr, dbOhne = korrekturOhne * lr;
+    const neuesWmit = w + dwMit, neuesBmit = b + dbMit;
+
+    // charts: guide + points + tangent
+    const gx = sx(Math.max(zMin, Math.min(zMax, z)));
+    guideTop.setAttribute('x1', gx); guideTop.setAttribute('x2', gx);
+    guideTop.setAttribute('y1', M.top); guideTop.setAttribute('y2', M.top + H);
+    dotTop.setAttribute('cx', gx); dotTop.setAttribute('cy', syTop(a));
+
+    const dz = 1.4;
+    const a1 = a + ableitung * (-dz), a2 = a + ableitung * dz;
+    tangent.setAttribute('x1', sx(z - dz)); tangent.setAttribute('y1', syTop(a1));
+    tangent.setAttribute('x2', sx(z + dz)); tangent.setAttribute('y2', syTop(a2));
+
+    guideBot.setAttribute('x1', gx); guideBot.setAttribute('x2', gx);
+    guideBot.setAttribute('y1', M.top); guideBot.setAttribute('y2', M.top + H);
+    dotBot.setAttribute('cx', gx); dotBot.setAttribute('cy', syBot(ableitung));
+
+    // steigung callout
+    if (ableitung < 0.05) {
+      steigungCallout.className = 'callout';
+      steigungCallout.innerHTML = `<b>Fast flach:</b> Bei z = ${f3(z)} ist die Kurve kaum noch geneigt (Ableitung ${f3(ableitung)}). Die Ausgabe a reagiert hier kaum noch auf Änderungen von z – das Neuron ist „gesättigt".`;
+    } else {
+      steigungCallout.className = 'callout calm';
+      steigungCallout.innerHTML = `<b>Steil genug:</b> Bei z = ${f3(z)} beträgt die Ableitung ${f3(ableitung)} – eine Änderung von z wirkt sich hier spürbar auf a aus.`;
+    }
+
+    // trace
+    trace.innerHTML = `
+      <div class="trace-row"><span class="step-name">Vorwärts</span><span class="eq">z = w·x + b = ${w.toFixed(1)}·${x.toFixed(1)} + ${b.toFixed(1)} = <span class="result">${f3(z)}</span></span></div>
+      <div class="trace-row"><span class="step-name">Aktivierung</span><span class="eq">a = sigmoid(z) = <span class="result">${f3(a)}</span></span></div>
+      <div class="trace-row"><span class="step-name">Fehler</span><span class="eq">fehler = t − a = ${t} − ${f3(a)} = <span class="result">${f3(fehler)}</span></span></div>
+      <div class="trace-row"><span class="step-name">Ableitung</span><span class="eq">a·(1−a) = ${f3(a)}·${f3(1 - a)} = <span class="result">${f3(ableitung)}</span></span></div>
+      <div class="trace-row"><span class="step-name">Korrektur</span><span class="eq">fehler · Ableitung = ${f3(fehler)} · ${f3(ableitung)} = <span class="result">${f3(korrekturMit)}</span></span></div>
+      <div class="trace-row"><span class="step-name">Δw</span><span class="eq">x · korrektur · lernrate = ${x.toFixed(1)}·${f3(korrekturMit)}·${lr.toFixed(1)} = <span class="result">${f3(dwMit)}</span></span></div>
+      <div class="trace-row"><span class="step-name">Δb</span><span class="eq">korrektur · lernrate = ${f3(korrekturMit)}·${lr.toFixed(1)} = <span class="result">${f3(dbMit)}</span></span></div>
+      <div class="trace-row"><span class="step-name">neues w, b</span><span class="eq">${w.toFixed(1)} + ${f3(dwMit)} = <span class="result">${f3(neuesWmit)}</span> &nbsp;|&nbsp; ${b.toFixed(1)} + ${f3(dbMit)} = <span class="result">${f3(neuesBmit)}</span></span></div>
+    `;
+
+    // compare cards
+    document.getElementById('korrektur-mit').textContent = f3(korrekturMit);
+    document.getElementById('dw-mit').textContent = `Δw = ${f3(dwMit)}`;
+    document.getElementById('korrektur-ohne').textContent = f3(korrekturOhne);
+    document.getElementById('dw-ohne').textContent = `Δw = ${f3(dwOhne)}`;
+
+    document.getElementById('card-mit').className = 'card on';
+    document.getElementById('card-ohne').className = 'card';
+
+    if (Math.abs(fehler) > 0.3 && ableitung < 0.05) {
+      korrekturCallout.className = 'callout';
+      korrekturCallout.innerHTML = `<b>Das Vanishing-Gradient-Problem:</b> Der Fehler ist hier riesig (${f3(fehler)}), aber die Korrektur fällt trotzdem fast auf 0 – die Sigmoid-Kurve ist an dieser Stelle einfach zu flach. Das Training wird dadurch langsamer, nicht klüger. Es funktioniert trotzdem, weil sich winzige Korrekturen über viele Durchläufe aufsummieren – aber genau dieses Verhalten ist einer der Gründe, warum spätere, tiefere Netze oft andere Aktivierungsfunktionen wie ReLU verwenden.`;
+    } else if (ableitung < 0.05) {
+      korrekturCallout.className = 'callout calm';
+      korrekturCallout.innerHTML = `<b>Das passt hier:</b> Die Ableitung ist klein, aber der Fehler ist es auch (${f3(fehler)}) – das Neuron liegt schon nah am Ziel und braucht kaum noch Korrektur. Sättigung ist nur dann ein Problem, wenn sie mit einem großen Fehler zusammentrifft.`;
+    } else {
+      korrekturCallout.className = 'callout calm';
+      korrekturCallout.innerHTML = `Bei dieser Steigung liegen beide Varianten noch nah beieinander – der Unterschied wird erst deutlich, wenn a nahe 0 oder 1 liegt, während gleichzeitig der Fehler groß bleibt. Versuch z.B. w = −4, b = −4 bei Ziel t = 1: dann ist das Neuron sich sicher, aber falsch.`;
+    }
+  }
+
+  [elx, elw, elb, ellr].forEach(inp => inp.addEventListener('input', render));
+  elt.addEventListener('change', render);
+
+  render();
+})();
+</script>
+</body>
+</html>
