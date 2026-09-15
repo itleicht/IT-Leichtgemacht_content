@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>kNN interaktiv: Katze oder Hund?</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  :root {
+    --surface-0: #f7f6f2;
+    --surface-1: #f1efe8;
+    --surface-2: #ffffff;
+    --text-primary: #0b0b0b;
+    --text-secondary: #52514e;
+    --border: rgba(11,11,11,0.10);
+    --radius: 8px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: var(--surface-0);
+    color: var(--text-primary);
+    margin: 0;
+    padding: 2rem 1rem;
+  }
+  .wrap {
+    max-width: 720px;
+    margin: 0 auto;
+    background: var(--surface-2);
+    border: 0.5px solid var(--border);
+    border-radius: 12px;
+    padding: 1.5rem 1.75rem 1.75rem;
+  }
+  h1 {
+    font-size: 20px;
+    font-weight: 500;
+    margin: 0 0 0.25rem;
+  }
+  .sub {
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin: 0 0 1rem;
+  }
+  .intro {
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--text-primary);
+    background: var(--surface-1);
+    border-radius: var(--radius);
+    padding: 0.85rem 1rem;
+    margin: 0 0 1.5rem;
+  }
+  .controls {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    margin-bottom: 1rem;
+  }
+  .control {
+    flex: 1;
+    min-width: 140px;
+  }
+  .control.small { min-width: 100px; max-width: 140px; flex: none; }
+  label {
+    font-size: 13px;
+    color: var(--text-secondary);
+    display: block;
+    margin-bottom: 4px;
+  }
+  label span.val {
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+  input[type="range"] {
+    width: 100%;
+  }
+  .chart-box {
+    margin: 0.5rem 0 1rem;
+    position: relative;
+    height: 340px;
+  }
+  #resultBox {
+    background: var(--surface-1);
+    border-radius: var(--radius);
+    padding: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  #resultDot {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #999;
+    display: inline-block;
+  }
+  #resultText { font-weight: 500; }
+  #voteText { font-size: 13px; color: var(--text-secondary); }
+  .legend {
+    display: flex;
+    gap: 16px;
+    margin-top: 12px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    flex-wrap: wrap;
+  }
+  .legend span.item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .lineswatch { width: 14px; height: 2px; background: #888780; display: inline-block; }
+  .sep {
+    border: none;
+    border-top: 0.5px solid var(--border);
+    margin: 2rem 0 1.5rem;
+  }
+  .section-title {
+    font-size: 16px;
+    font-weight: 500;
+    margin: 0 0 0.6rem;
+  }
+  code {
+    background: var(--surface-1);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 0.9em;
+  }
+  #formulaBox {
+    background: var(--surface-1);
+    border-radius: var(--radius);
+    padding: 0.85rem 1rem;
+    font-size: 14px;
+    margin: 0.25rem 0 1rem;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>kNN interaktiv: Katze oder Hund?</h1>
+  <p class="sub">Zu "Ein neuer Algorithmus, ein neues Werkzeug" (Folge 10) &mdash; IT-leichtgemacht</p>
+
+  <p class="intro">
+    Der k-nächste-Nachbarn-Algorithmus (kNN) ordnet einen neuen Datenpunkt einfach der Klasse zu, die unter seinen k nächsten Nachbarn im Datensatz am häufigsten vorkommt &mdash; kein Training, kein Lernen von Gewichten, nur Abstand messen und abstimmen. Erstmals beschrieben wurde die Idee 1951 von Evelyn Fix und Joseph Hodges, formal ausgearbeitet dann 1967 von Thomas Cover und Peter Hart.
+  </p>
+
+  <div class="controls">
+    <div class="control">
+      <label>Größe (cm): <span class="val" id="groesse-out">40</span></label>
+      <input type="range" min="15" max="105" value="40" step="1" id="groesse" />
+    </div>
+    <div class="control">
+      <label>Gewicht (kg): <span class="val" id="gewicht-out">7</span></label>
+      <input type="range" min="2" max="38" value="7" step="0.5" id="gewicht" />
+    </div>
+    <div class="control small">
+      <label>k = <span class="val" id="k-out">3</span></label>
+      <input type="range" min="1" max="7" value="3" step="2" id="kwert" />
+    </div>
+  </div>
+
+  <div class="chart-box">
+    <canvas id="knnChart" role="img" aria-label="Streudiagramm mit Größe auf der x-Achse und Gewicht auf der y-Achse. Katzen und Hunde als farbige Punkte, ein neuer Punkt kann per Regler platziert werden."></canvas>
+  </div>
+
+  <div id="resultBox">
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <span id="resultDot"></span>
+      <span style="font-size: 15px;">Vorhersage für den neuen Punkt: <span id="resultText">–</span></span>
+    </div>
+    <div id="voteText"></div>
+  </div>
+
+  <div class="legend">
+    <span class="item"><span class="dot" style="background:#1D9E75;"></span>Katze</span>
+    <span class="item"><span class="dot" style="background:#D85A30;"></span>Hund</span>
+    <span class="item"><span class="dot" style="background:#BA7517; border:2px solid #412402;"></span>Neuer Punkt</span>
+    <span class="item"><span class="lineswatch"></span>Verbindung zu den k nächsten Nachbarn</span>
+  </div>
+
+  <hr class="sep" />
+
+  <h2 class="section-title">Wie wird der Abstand berechnet?</h2>
+  <p class="intro">
+    Im Code übernimmt das die Funktion <code>abstand()</code>: der euklidische Abstand zwischen zwei Punkten ist die direkte Luftlinie zwischen ihnen &mdash; wie mit einem Lineal auf Papier gemessen. Rechnerisch entspricht das dem Satz des Pythagoras: aus der Differenz in Größe (Δgröße) und der Differenz in Gewicht (Δgewicht) bildet man ein rechtwinkliges Dreieck, dessen Hypotenuse genau dieser Abstand ist.
+  </p>
+
+  <div class="chart-box" style="height: 300px;">
+    <canvas id="distChart" role="img" aria-label="Diagramm, das den euklidischen Abstand zwischen dem neuen Punkt und seinem nächsten Nachbarn als rechtwinkliges Dreieck darstellt."></canvas>
+  </div>
+
+  <div id="formulaBox">
+    <span id="formulaText">–</span>
+  </div>
+
+  <div class="legend">
+    <span class="item"><span class="lineswatch" style="background:#4C6EF5;"></span>Δgröße (dx)</span>
+    <span class="item"><span class="lineswatch" style="background:#C2410C;"></span>Δgewicht (dy)</span>
+    <span class="item"><span class="lineswatch" style="background:#412402;"></span>Abstand (Hypotenuse)</span>
+  </div>
+</div>
+
+<script>
+const daten = [
+  {g:25, w:4,   t:'Katze'},
+  {g:30, w:5,   t:'Katze'},
+  {g:45, w:8,   t:'Katze'},
+  {g:90, w:30,  t:'Hund'},
+  {g:95, w:35,  t:'Hund'},
+  {g:100,w:32,  t:'Hund'},
+  {g:20, w:3,   t:'Katze'},
+  {g:28, w:4.5, t:'Katze'}
+];
+
+const catColor = '#1D9E75';
+const dogColor = '#D85A30';
+const newColor = '#BA7517';
+const lineColor = '#888780';
+
+function abstand(g1,w1,g2,w2){
+  return Math.sqrt((g1-g2)**2 + (w1-w2)**2);
+}
+
+const ctx = document.getElementById('knnChart');
+
+function baseDatasets(){
+  return [
+    {
+      label: 'Katze',
+      data: daten.filter(d=>d.t==='Katze').map(d=>({x:d.g,y:d.w})),
+      backgroundColor: catColor,
+      pointRadius: 7,
+      pointHoverRadius: 8,
+      order: 3
+    },
+    {
+      label: 'Hund',
+      data: daten.filter(d=>d.t==='Hund').map(d=>({x:d.g,y:d.w})),
+      backgroundColor: dogColor,
+      pointRadius: 7,
+      pointHoverRadius: 8,
+      order: 3
+    },
+    {
+      label: 'Neuer Punkt',
+      data: [{x: Number(document.getElementById('groesse').value), y: Number(document.getElementById('gewicht').value)}],
+      backgroundColor: newColor,
+      pointRadius: 9,
+      pointStyle: 'rectRot',
+      borderColor: '#412402',
+      borderWidth: 2,
+      order: 1
+    }
+  ];
+}
+
+const chart = new Chart(ctx, {
+  type: 'scatter',
+  data: { datasets: baseDatasets() },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    scales: {
+      x: { title: { display: true, text: 'Größe (cm)' }, min: 10, max: 110 },
+      y: { title: { display: true, text: 'Gewicht (kg)' }, min: 0, max: 40 }
+    },
+    plugins: { legend: { display: false } }
+  }
+});
+
+const distCtx = document.getElementById('distChart');
+const distChart = new Chart(distCtx, {
+  type: 'scatter',
+  data: { datasets: [] },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    scales: {
+      x: { title: { display: true, text: 'Größe (cm)' } },
+      y: { title: { display: true, text: 'Gewicht (kg)' } }
+    },
+    plugins: { legend: { display: false } }
+  }
+});
+
+function updateDistChart(neuerPunkt, naechster){
+  const {g: g1, w: w1} = neuerPunkt;
+  const {g: g2, w: w2} = naechster;
+  const ecke = {x: g2, y: w1};
+  const dx = Math.abs(g1 - g2);
+  const dy = Math.abs(w1 - w2);
+  const dist = Math.sqrt(dx*dx + dy*dy);
+
+  const padX = Math.max(dx * 0.3, 5);
+  const padY = Math.max(dy * 0.3, 3);
+  distChart.options.scales.x.min = Math.min(g1, g2) - padX;
+  distChart.options.scales.x.max = Math.max(g1, g2) + padX;
+  distChart.options.scales.y.min = Math.min(w1, w2) - padY;
+  distChart.options.scales.y.max = Math.max(w1, w2) + padY;
+
+  distChart.data.datasets = [
+    { type: 'line', data: [{x:g1,y:w1},{x:ecke.x,y:ecke.y}], borderColor: '#4C6EF5', borderWidth: 2.5, pointRadius: 0 },
+    { type: 'line', data: [{x:ecke.x,y:ecke.y},{x:g2,y:w2}], borderColor: '#C2410C', borderWidth: 2.5, pointRadius: 0 },
+    { type: 'line', data: [{x:g1,y:w1},{x:g2,y:w2}], borderColor: '#412402', borderWidth: 2, borderDash: [5,3], pointRadius: 0 },
+    { data: [{x:g1,y:w1}], backgroundColor: newColor, pointRadius: 8, pointStyle: 'rectRot', borderColor: '#412402', borderWidth: 2 },
+    { data: [{x:g2,y:w2}], backgroundColor: naechster.t === 'Katze' ? catColor : dogColor, pointRadius: 7 }
+  ];
+  distChart.update();
+
+  document.getElementById('formulaText').innerHTML =
+    'Abstand = √(Δgröße² + Δgewicht²) = √(' + dx.toFixed(1) + '² + ' + dy.toFixed(1) + '²) ≈ <strong>' + dist.toFixed(2) + '</strong>';
+}
+
+function klassifiziere(){
+  const g = Number(document.getElementById('groesse').value);
+  const w = Number(document.getElementById('gewicht').value);
+  const k = Number(document.getElementById('kwert').value);
+
+  document.getElementById('groesse-out').textContent = g;
+  document.getElementById('gewicht-out').textContent = w;
+  document.getElementById('k-out').textContent = k;
+
+  const abstaende = daten.map(d => ({...d, d: abstand(g,w,d.g,d.w)}));
+  abstaende.sort((a,b) => a.d - b.d);
+  const nachbarn = abstaende.slice(0, k);
+
+  updateDistChart({g, w}, abstaende[0]);
+
+  const stimmen = {};
+  nachbarn.forEach(n => { stimmen[n.t] = (stimmen[n.t]||0) + 1; });
+  let gewinner = null, max = -1;
+  for (const t in stimmen){ if (stimmen[t] > max){ max = stimmen[t]; gewinner = t; } }
+
+  document.getElementById('resultText').textContent = gewinner;
+  document.getElementById('resultDot').style.background = gewinner === 'Katze' ? catColor : dogColor;
+  const stimmenTxt = Object.entries(stimmen).map(([t,c]) => c + 'x ' + t).join(', ');
+  document.getElementById('voteText').textContent = k + ' nächste Nachbarn: ' + stimmenTxt;
+
+  const lineDatasets = nachbarn.map(n => ({
+    type: 'line',
+    data: [{x:g,y:w},{x:n.g,y:n.w}],
+    borderColor: lineColor,
+    borderWidth: 1.5,
+    borderDash: [4,3],
+    pointRadius: 0,
+    order: 4
+  }));
+
+  chart.data.datasets = [...baseDatasets(), ...lineDatasets];
+  chart.update();
+}
+
+document.getElementById('groesse').addEventListener('input', klassifiziere);
+document.getElementById('gewicht').addEventListener('input', klassifiziere);
+document.getElementById('kwert').addEventListener('input', klassifiziere);
+
+klassifiziere();
+</script>
+</body>
+</html>
