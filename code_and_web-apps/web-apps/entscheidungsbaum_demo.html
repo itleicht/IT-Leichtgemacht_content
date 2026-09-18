@@ -1,0 +1,873 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Folge 11 – Der Entscheidungsbaum live</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #14181C;
+    --bg-panel: #1B2028;
+    --bg-panel-raised: #232933;
+    --line: #333A45;
+    --text: #E8E9EB;
+    --text-dim: #9AA1AC;
+    --accent: #F5C4B3;
+    --accent-strong: #D85A30;
+    --leaf-ja: #9FC6A8;
+    --leaf-nein: #4A505A;
+    --leaf-ja-text: #14181C;
+    --leaf-nein-text: #E8E9EB;
+  }
+
+  *{ box-sizing: border-box; }
+
+  body{
+    margin:0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "IBM Plex Sans", sans-serif;
+    padding: 2.5rem 1.25rem 4rem;
+  }
+
+  .wrap{
+    max-width: 1080px;
+    margin: 0 auto;
+  }
+
+  header{
+    margin-bottom: 2rem;
+  }
+
+  h1{
+    font-family: "Space Grotesk", sans-serif;
+    font-weight: 700;
+    font-size: clamp(1.4rem, 3vw, 2rem);
+    margin: 0 0 0.5rem;
+    letter-spacing: -0.01em;
+  }
+
+  header p{
+    color: var(--text-dim);
+    max-width: 60ch;
+    line-height: 1.5;
+    margin: 0;
+    font-size: 0.98rem;
+  }
+
+  .layout{
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    gap: 1.5rem;
+    align-items: start;
+  }
+
+  @media (max-width: 760px){
+    .layout{ grid-template-columns: 1fr; }
+  }
+
+  .panel{
+    background: var(--bg-panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 1.4rem;
+  }
+
+  .panel h2{
+    font-family: "Space Grotesk", sans-serif;
+    font-size: 0.78rem;
+    text-transform: none;
+    color: var(--text-dim);
+    margin: 0 0 1rem;
+    font-weight: 500;
+  }
+
+  .frage-block{
+    margin-bottom: 1.4rem;
+  }
+
+  .frage-block:last-of-type{
+    margin-bottom: 0;
+  }
+
+  .frage-block .label{
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.82rem;
+    color: var(--accent);
+    margin-bottom: 0.55rem;
+    display:block;
+  }
+
+  .optionen{
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  button.opt{
+    font-family: "IBM Plex Sans", sans-serif;
+    font-size: 0.88rem;
+    padding: 0.5rem 0.85rem;
+    border-radius: 7px;
+    border: 1px solid var(--line);
+    background: var(--bg-panel-raised);
+    color: var(--text);
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+  }
+
+  button.opt:hover{
+    border-color: var(--accent);
+  }
+
+  button.opt:focus-visible{
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  button.opt.aktiv{
+    background: var(--accent);
+    color: #14181C;
+    border-color: var(--accent);
+    font-weight: 500;
+  }
+
+  button.opt:active{
+    transform: translateY(1px);
+  }
+
+  #reset{
+    margin-top: 1.6rem;
+    background: transparent;
+    border: 1px solid var(--line);
+    color: var(--text-dim);
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.8rem;
+    padding: 0.5rem 0.9rem;
+    border-radius: 7px;
+    cursor: pointer;
+  }
+
+  #reset:hover{
+    color: var(--text);
+    border-color: var(--text-dim);
+  }
+
+  .ergebnis-box{
+    margin-top: 1.6rem;
+    padding: 1rem;
+    border-radius: 8px;
+    background: var(--bg-panel-raised);
+    border: 1px solid var(--line);
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.9rem;
+    min-height: 3.4rem;
+    display: flex;
+    align-items: center;
+    color: var(--text-dim);
+  }
+
+  .ergebnis-box.entschieden{
+    border-color: var(--accent);
+    color: var(--text);
+  }
+
+  .ergebnis-box b{
+    color: var(--accent);
+    margin-left: 0.4ch;
+  }
+
+  svg{
+    width: 100%;
+    height: auto;
+    display: block;
+  }
+
+  .knoten-rect{
+    fill: var(--bg-panel-raised);
+    stroke: var(--line);
+    stroke-width: 1.5;
+    transition: stroke 0.25s ease, fill 0.25s ease;
+  }
+
+  .knoten-rect.aktiv{
+    stroke: var(--accent);
+    stroke-width: 2.5;
+  }
+
+  .blatt-rect{
+    stroke-width: 1.5;
+    transition: opacity 0.25s ease, filter 0.25s ease;
+    opacity: 0.55;
+  }
+  .blatt-rect.ja{ fill: var(--leaf-ja); stroke: var(--leaf-ja); }
+  .blatt-rect.nein{ fill: var(--leaf-nein); stroke: var(--line); }
+  .blatt-rect.erreicht{
+    opacity: 1;
+    filter: drop-shadow(0 0 6px rgba(245,196,179,0.55));
+  }
+
+  .knoten-text{
+    font-family: "IBM Plex Sans", sans-serif;
+    font-size: 15px;
+    fill: var(--text);
+    text-anchor: middle;
+  }
+  .blatt-text{
+    font-family: "IBM Plex Sans", sans-serif;
+    font-weight: 600;
+    font-size: 15px;
+    text-anchor: middle;
+  }
+  .blatt-text.ja{ fill: var(--leaf-ja-text); }
+  .blatt-text.nein{ fill: var(--leaf-nein-text); }
+
+  .kante{
+    stroke: var(--line);
+    stroke-width: 1.5;
+    fill: none;
+    transition: stroke 0.25s ease, stroke-width 0.25s ease;
+  }
+  .kante.aktiv{
+    stroke: var(--accent);
+    stroke-width: 2.5;
+  }
+
+  .kanten-label{
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 12.5px;
+    fill: var(--text-dim);
+    text-anchor: middle;
+  }
+  .kanten-label.aktiv{ fill: var(--accent); }
+
+  .puls{
+    fill: var(--accent);
+    opacity: 0;
+  }
+  @media (prefers-reduced-motion: no-preference){
+    .puls.laeuft{
+      animation: puls-lauf 1.1s ease-in-out;
+    }
+  }
+  @keyframes puls-lauf{
+    0%{ opacity: 0; }
+    12%{ opacity: 1; }
+    88%{ opacity: 1; }
+    100%{ opacity: 0; }
+  }
+
+  table{
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 2.2rem;
+    font-size: 0.85rem;
+  }
+  caption{
+    text-align: left;
+    font-family: "Space Grotesk", sans-serif;
+    color: var(--text-dim);
+    font-size: 0.78rem;
+    font-weight: 500;
+    margin-bottom: 0.7rem;
+  }
+  th, td{
+    padding: 0.5rem 0.7rem;
+    text-align: left;
+    border-bottom: 1px solid var(--line);
+    color: var(--text-dim);
+  }
+  th{
+    font-family: "IBM Plex Mono", monospace;
+    font-weight: 500;
+    color: var(--text-dim);
+    font-size: 0.75rem;
+  }
+  tr.match td{
+    color: var(--text);
+    background: rgba(245,196,179,0.07);
+  }
+  tr.match td:first-child{
+    box-shadow: inset 3px 0 0 var(--accent);
+  }
+  td.spielen-ja{ color: var(--leaf-ja); }
+  td.spielen-nein{ color: var(--text-dim); }
+
+  .bildung{
+    margin-top: 2.6rem;
+  }
+
+  .bildung > p.intro{
+    color: var(--text-dim);
+    max-width: 68ch;
+    line-height: 1.55;
+    font-size: 0.95rem;
+    margin: 0 0 1.4rem;
+  }
+
+  .stepper-kopf{
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  .stepper-dots{
+    display: flex;
+    gap: 0.4rem;
+  }
+
+  .stepper-dots button{
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    border: none;
+    background: var(--line);
+    cursor: pointer;
+    padding: 0;
+  }
+  .stepper-dots button.aktiv{
+    background: var(--accent);
+  }
+  .stepper-dots button:focus-visible{
+    outline: 2px solid var(--accent);
+    outline-offset: 3px;
+  }
+
+  .stepper-nav{
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .stepper-nav button{
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.8rem;
+    background: var(--bg-panel-raised);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 0.4rem 0.75rem;
+    cursor: pointer;
+  }
+  .stepper-nav button:hover{ border-color: var(--accent); }
+  .stepper-nav button:disabled{
+    opacity: 0.35;
+    cursor: default;
+  }
+  .stepper-nav button:disabled:hover{ border-color: var(--line); }
+
+  .schritt-panel{
+    background: var(--bg-panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 1.5rem 1.6rem;
+  }
+
+  .schritt-titel{
+    font-family: "Space Grotesk", sans-serif;
+    font-size: 1.05rem;
+    font-weight: 600;
+    margin: 0 0 0.4rem;
+  }
+
+  .schritt-kontext{
+    color: var(--text-dim);
+    font-size: 0.88rem;
+    margin: 0 0 1.3rem;
+    line-height: 1.5;
+  }
+
+  .bar-row{
+    display: grid;
+    grid-template-columns: 140px 1fr 70px;
+    align-items: center;
+    gap: 0.8rem;
+    margin-bottom: 0.65rem;
+  }
+
+  .bar-name{
+    font-size: 0.85rem;
+    color: var(--text);
+  }
+  .bar-row.gewinner .bar-name{
+    color: var(--accent);
+    font-weight: 600;
+  }
+
+  .bar-track{
+    height: 10px;
+    background: var(--bg-panel-raised);
+    border-radius: 5px;
+    overflow: hidden;
+    border: 1px solid var(--line);
+  }
+
+  .bar-fill{
+    height: 100%;
+    background: var(--text-dim);
+    border-radius: 5px 0 0 5px;
+    transition: width 0.4s ease;
+  }
+  .bar-row.gewinner .bar-fill{
+    background: var(--accent);
+  }
+
+  .bar-wert{
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 0.78rem;
+    color: var(--text-dim);
+    text-align: right;
+  }
+  .bar-row.gewinner .bar-wert{ color: var(--accent); }
+
+  .schritt-fazit{
+    margin-top: 1.1rem;
+    padding-top: 1.1rem;
+    border-top: 1px solid var(--line);
+    font-size: 0.88rem;
+    line-height: 1.55;
+    color: var(--text);
+  }
+
+  .rein-box{
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    padding: 0.9rem 1rem;
+    background: var(--bg-panel-raised);
+    border: 1px dashed var(--line);
+    border-radius: 8px;
+    color: var(--text-dim);
+    font-size: 0.88rem;
+    margin-bottom: 0.3rem;
+  }
+  .rein-box .haken{
+    color: var(--leaf-ja);
+    font-family: "IBM Plex Mono", monospace;
+    font-size: 1.05rem;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>Der Entscheidungsbaum aus Folge 11 – zum Selberklicken</h1>
+    <p>Beantworte die Fragen links so, wie es zu deinem Wetter passt. Rechts siehst du live, welchen Ast der Baum nimmt – und unten, welche Trainingsfälle zu diesem Ast gehören.</p>
+  </header>
+
+  <div class="layout">
+
+    <div class="panel" id="steuerung">
+      <h2>Fragen</h2>
+
+      <div class="frage-block">
+        <span class="label">Wetter?</span>
+        <div class="optionen" id="opt-wetter">
+          <button class="opt" data-frage="wetter" data-wert="Sonnig">Sonnig</button>
+          <button class="opt" data-frage="wetter" data-wert="Bewölkt">Bewölkt</button>
+          <button class="opt" data-frage="wetter" data-wert="Regen">Regen</button>
+        </div>
+      </div>
+
+      <div class="frage-block" id="block-luft" hidden>
+        <span class="label">Luftfeuchtigkeit?</span>
+        <div class="optionen" id="opt-luft">
+          <button class="opt" data-frage="luft" data-wert="Hoch">Hoch</button>
+          <button class="opt" data-frage="luft" data-wert="Normal">Normal</button>
+        </div>
+      </div>
+
+      <div class="frage-block" id="block-wind" hidden>
+        <span class="label">Wind?</span>
+        <div class="optionen" id="opt-wind">
+          <button class="opt" data-frage="wind" data-wert="Schwach">Schwach</button>
+          <button class="opt" data-frage="wind" data-wert="Stark">Stark</button>
+        </div>
+      </div>
+
+      <div class="ergebnis-box" id="ergebnis-box">Wähle zuerst das Wetter aus.</div>
+
+      <button id="reset">Zurücksetzen</button>
+    </div>
+
+    <div class="panel">
+      <h2>Der Baum</h2>
+      <svg viewBox="0 0 900 480" xmlns="http://www.w3.org/2000/svg" aria-label="Entscheidungsbaum-Diagramm">
+
+        <!-- Kanten: Wurzel -> Ebene 2 -->
+        <path class="kante" id="k-wetter-sonnig" d="M450,95 C380,140 260,140 190,180"/>
+        <path class="kante" id="k-wetter-bewoelkt" d="M450,95 L450,180"/>
+        <path class="kante" id="k-wetter-regen" d="M450,95 C520,140 640,140 710,180"/>
+
+        <text class="kanten-label" id="kl-sonnig" x="290" y="150">Sonnig</text>
+        <text class="kanten-label" id="kl-bewoelkt" x="465" y="145">Bewölkt</text>
+        <text class="kanten-label" id="kl-regen" x="615" y="150">Regen</text>
+
+        <!-- Kanten: Sonnig-Knoten -> Blätter -->
+        <path class="kante" id="k-luft-hoch" d="M150,220 C110,270 90,290 80,330"/>
+        <path class="kante" id="k-luft-normal" d="M180,220 C210,270 235,300 250,330"/>
+        <text class="kanten-label" id="kl-hoch" x="85" y="285">Hoch</text>
+        <text class="kanten-label" id="kl-normal" x="245" y="285">Normal</text>
+
+        <!-- Kanten: Regen-Knoten -> Blätter -->
+        <path class="kante" id="k-wind-schwach" d="M720,220 C700,270 675,300 660,330"/>
+        <path class="kante" id="k-wind-stark" d="M750,220 C800,270 815,290 825,330"/>
+        <text class="kanten-label" id="kl-schwach" x="655" y="285">Schwach</text>
+        <text class="kanten-label" id="kl-stark" x="825" y="285">Stark</text>
+
+        <!-- Wurzel -->
+        <rect class="knoten-rect" id="knoten-wetter" x="385" y="45" width="130" height="52" rx="8"/>
+        <text class="knoten-text" x="450" y="76">Wetter?</text>
+
+        <!-- Ebene 2 -->
+        <rect class="knoten-rect" id="knoten-luft" x="100" y="180" width="150" height="52" rx="8"/>
+        <text class="knoten-text" x="175" y="211">Luftfeuchtigkeit?</text>
+
+        <rect class="blatt-rect ja" id="blatt-bewoelkt" x="410" y="180" width="80" height="52" rx="8"/>
+        <text class="blatt-text ja" x="450" y="211">ja</text>
+
+        <rect class="knoten-rect" id="knoten-wind" x="655" y="180" width="130" height="52" rx="8"/>
+        <text class="knoten-text" x="720" y="211">Wind?</text>
+
+        <!-- Ebene 3 -->
+        <rect class="blatt-rect nein" id="blatt-hoch" x="35" y="330" width="90" height="52" rx="8"/>
+        <text class="blatt-text nein" x="80" y="361">nein</text>
+
+        <rect class="blatt-rect ja" id="blatt-normal" x="205" y="330" width="90" height="52" rx="8"/>
+        <text class="blatt-text ja" x="250" y="361">ja</text>
+
+        <rect class="blatt-rect ja" id="blatt-schwach" x="615" y="330" width="90" height="52" rx="8"/>
+        <text class="blatt-text ja" x="660" y="361">ja</text>
+
+        <rect class="blatt-rect nein" id="blatt-stark" x="780" y="330" width="90" height="52" rx="8"/>
+        <text class="blatt-text nein" x="825" y="361">nein</text>
+
+        <circle class="puls" id="puls" r="7"/>
+      </svg>
+    </div>
+  </div>
+
+  <table id="tabelle">
+    <caption>Trainingsdaten aus Folge 11 – passende Zeilen werden hervorgehoben</caption>
+    <thead>
+      <tr><th>Wetter</th><th>Temperatur</th><th>Luftfeuchtigkeit</th><th>Wind</th><th>Spielen</th></tr>
+    </thead>
+    <tbody id="tabelle-body"></tbody>
+  </table>
+
+  <section class="bildung">
+    <h2 style="font-family:'Space Grotesk',sans-serif;font-size:1rem;font-weight:600;margin:0 0 0.6rem;">Wie entsteht dieser Baum – und warum genau so?</h2>
+    <p class="intro">Der Baum wird nicht gezeichnet, sondern beim Trainieren Schritt für Schritt berechnet. An jeder Stelle prüft der Code alle noch verfügbaren Spalten: Wie viele Fälle würde man richtig vorhersagen, wenn man nach dieser Spalte aufteilt und pro Gruppe einfach die Mehrheitsklasse rät? Die Spalte mit den meisten Treffern wird zur nächsten Frage. Das ist die "simple Abzählung" anstelle einer Informationsgewinn-Formel.</p>
+
+    <div class="stepper-kopf">
+      <div class="stepper-dots" id="schritt-dots"></div>
+      <div class="stepper-nav">
+        <button id="schritt-zurueck">← Zurück</button>
+        <button id="schritt-weiter">Weiter →</button>
+      </div>
+    </div>
+
+    <div class="schritt-panel" id="schritt-panel"></div>
+  </section>
+
+</div>
+
+<script>
+  const daten = [
+    {Wetter:"Sonnig",  Temperatur:"Warm", Luftfeuchtigkeit:"Hoch",   Wind:"Schwach", Spielen:"nein"},
+    {Wetter:"Sonnig",  Temperatur:"Warm", Luftfeuchtigkeit:"Hoch",   Wind:"Stark",   Spielen:"nein"},
+    {Wetter:"Bewölkt", Temperatur:"Warm", Luftfeuchtigkeit:"Hoch",   Wind:"Schwach", Spielen:"ja"},
+    {Wetter:"Regen",   Temperatur:"Mild", Luftfeuchtigkeit:"Hoch",   Wind:"Schwach", Spielen:"ja"},
+    {Wetter:"Regen",   Temperatur:"Kühl", Luftfeuchtigkeit:"Normal", Wind:"Schwach", Spielen:"ja"},
+    {Wetter:"Regen",   Temperatur:"Kühl", Luftfeuchtigkeit:"Normal", Wind:"Stark",   Spielen:"nein"},
+    {Wetter:"Bewölkt", Temperatur:"Kühl", Luftfeuchtigkeit:"Normal", Wind:"Stark",   Spielen:"ja"},
+    {Wetter:"Sonnig",  Temperatur:"Mild", Luftfeuchtigkeit:"Hoch",   Wind:"Schwach", Spielen:"nein"},
+    {Wetter:"Sonnig",  Temperatur:"Kühl", Luftfeuchtigkeit:"Normal", Wind:"Schwach", Spielen:"ja"},
+    {Wetter:"Regen",   Temperatur:"Mild", Luftfeuchtigkeit:"Normal", Wind:"Schwach", Spielen:"ja"},
+    {Wetter:"Sonnig",  Temperatur:"Mild", Luftfeuchtigkeit:"Normal", Wind:"Stark",   Spielen:"ja"},
+    {Wetter:"Bewölkt", Temperatur:"Mild", Luftfeuchtigkeit:"Hoch",   Wind:"Stark",   Spielen:"ja"},
+    {Wetter:"Bewölkt", Temperatur:"Warm", Luftfeuchtigkeit:"Normal", Wind:"Schwach", Spielen:"ja"},
+    {Wetter:"Regen",   Temperatur:"Mild", Luftfeuchtigkeit:"Hoch",   Wind:"Stark",   Spielen:"nein"},
+  ];
+
+  const auswahl = { wetter: null, luft: null, wind: null };
+
+  const blockLuft = document.getElementById("block-luft");
+  const blockWind = document.getElementById("block-wind");
+  const ergebnisBox = document.getElementById("ergebnis-box");
+  const tabelleBody = document.getElementById("tabelle-body");
+
+  function baueTabelle(){
+    tabelleBody.innerHTML = "";
+    daten.forEach(zeile => {
+      const tr = document.createElement("tr");
+      const passt = zeilePasstZuAuswahl(zeile);
+      if (passt) tr.classList.add("match");
+      tr.innerHTML = `
+        <td>${zeile.Wetter}</td>
+        <td>${zeile.Temperatur}</td>
+        <td>${zeile.Luftfeuchtigkeit}</td>
+        <td>${zeile.Wind}</td>
+        <td class="spielen-${zeile.Spielen}">${zeile.Spielen}</td>
+      `;
+      tabelleBody.appendChild(tr);
+    });
+  }
+
+  function zeilePasstZuAuswahl(zeile){
+    if (!auswahl.wetter) return false;
+    if (zeile.Wetter !== auswahl.wetter) return false;
+    if (auswahl.wetter === "Sonnig"){
+      return auswahl.luft ? zeile.Luftfeuchtigkeit === auswahl.luft : true;
+    }
+    if (auswahl.wetter === "Regen"){
+      return auswahl.wind ? zeile.Wind === auswahl.wind : true;
+    }
+    return true; // Bewölkt: keine weitere Frage nötig
+  }
+
+  function alleAeste(){
+    return ["k-wetter-sonnig","k-wetter-bewoelkt","k-wetter-regen",
+            "k-luft-hoch","k-luft-normal","k-wind-schwach","k-wind-stark"];
+  }
+  function alleLabels(){
+    return ["kl-sonnig","kl-bewoelkt","kl-regen","kl-hoch","kl-normal","kl-schwach","kl-stark"];
+  }
+  function alleKnoten(){
+    return ["knoten-wetter","knoten-luft","knoten-wind"];
+  }
+  function alleBlaetter(){
+    return ["blatt-hoch","blatt-normal","blatt-bewoelkt","blatt-schwach","blatt-stark"];
+  }
+
+  function zuruecksetzenVisuell(){
+    alleAeste().forEach(id => document.getElementById(id).classList.remove("aktiv"));
+    alleLabels().forEach(id => document.getElementById(id).classList.remove("aktiv"));
+    alleKnoten().forEach(id => document.getElementById(id).classList.remove("aktiv"));
+    alleBlaetter().forEach(id => document.getElementById(id).classList.remove("erreicht"));
+    document.querySelectorAll("button.opt").forEach(b => b.classList.remove("aktiv"));
+  }
+
+  function aktivieren(...ids){
+    ids.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.classList.add(el.classList.contains("kante") ? "aktiv" :
+                                 el.classList.contains("kanten-label") ? "aktiv" :
+                                 el.classList.contains("knoten-rect") ? "aktiv" : "erreicht");
+    });
+  }
+
+  function pulsAn(pfadPunkte){
+    // einfache Pulsanimation entlang des zuletzt aktivierten Pfads
+    const puls = document.getElementById("puls");
+    if (!pfadPunkte || pfadPunkte.length === 0) return;
+    puls.setAttribute("cx", pfadPunkte[pfadPunkte.length-1][0]);
+    puls.setAttribute("cy", pfadPunkte[pfadPunkte.length-1][1]);
+    puls.classList.remove("laeuft");
+    void puls.offsetWidth; // reflow erzwingen, damit die Animation neu startet
+    puls.classList.add("laeuft");
+  }
+
+  function aktualisieren(){
+    zuruecksetzenVisuell();
+    blockLuft.hidden = true;
+    blockWind.hidden = true;
+
+    document.querySelectorAll(`button.opt[data-frage="wetter"]`).forEach(b => {
+      if (b.dataset.wert === auswahl.wetter) b.classList.add("aktiv");
+    });
+
+    if (!auswahl.wetter){
+      ergebnisBox.textContent = "Wähle zuerst das Wetter aus.";
+      ergebnisBox.classList.remove("entschieden");
+      baueTabelle();
+      return;
+    }
+
+    // Wurzel-Knoten immer aktiv, sobald Wetter gewählt
+    aktivieren("knoten-wetter");
+
+    if (auswahl.wetter === "Sonnig"){
+      aktivieren("k-wetter-sonnig", "kl-sonnig", "knoten-luft");
+      blockLuft.hidden = false;
+      document.querySelectorAll(`button.opt[data-frage="luft"]`).forEach(b => {
+        if (b.dataset.wert === auswahl.luft) b.classList.add("aktiv");
+      });
+
+      if (!auswahl.luft){
+        ergebnisBox.textContent = "Wie ist die Luftfeuchtigkeit?";
+        ergebnisBox.classList.remove("entschieden");
+        baueTabelle();
+        return;
+      }
+      if (auswahl.luft === "Hoch"){
+        aktivieren("k-luft-hoch", "kl-hoch", "blatt-hoch");
+        zeigeErgebnis("nein");
+        pulsAn([[450,71],[190,180],[80,356]]);
+      } else {
+        aktivieren("k-luft-normal", "kl-normal", "blatt-normal");
+        zeigeErgebnis("ja");
+        pulsAn([[450,71],[190,180],[250,356]]);
+      }
+
+    } else if (auswahl.wetter === "Bewölkt"){
+      aktivieren("k-wetter-bewoelkt", "kl-bewoelkt", "blatt-bewoelkt");
+      zeigeErgebnis("ja");
+      pulsAn([[450,71],[450,206]]);
+
+    } else if (auswahl.wetter === "Regen"){
+      aktivieren("k-wetter-regen", "kl-regen", "knoten-wind");
+      blockWind.hidden = false;
+      document.querySelectorAll(`button.opt[data-frage="wind"]`).forEach(b => {
+        if (b.dataset.wert === auswahl.wind) b.classList.add("aktiv");
+      });
+
+      if (!auswahl.wind){
+        ergebnisBox.textContent = "Wie stark ist der Wind?";
+        ergebnisBox.classList.remove("entschieden");
+        baueTabelle();
+        return;
+      }
+      if (auswahl.wind === "Schwach"){
+        aktivieren("k-wind-schwach", "kl-schwach", "blatt-schwach");
+        zeigeErgebnis("ja");
+        pulsAn([[450,71],[710,180],[660,356]]);
+      } else {
+        aktivieren("k-wind-stark", "kl-stark", "blatt-stark");
+        zeigeErgebnis("nein");
+        pulsAn([[450,71],[710,180],[825,356]]);
+      }
+    }
+
+    baueTabelle();
+  }
+
+  function zeigeErgebnis(wert){
+    ergebnisBox.innerHTML = `Der Baum entscheidet: Spielen =<b>${wert}</b>`;
+    ergebnisBox.classList.add("entschieden");
+  }
+
+  document.querySelectorAll("button.opt").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const frage = btn.dataset.frage;
+      const wert = btn.dataset.wert;
+      auswahl[frage] = wert;
+      if (frage === "wetter"){ auswahl.luft = null; auswahl.wind = null; }
+      aktualisieren();
+    });
+  });
+
+  document.getElementById("reset").addEventListener("click", () => {
+    auswahl.wetter = null; auswahl.luft = null; auswahl.wind = null;
+    aktualisieren();
+  });
+
+  aktualisieren();
+
+  // --- Abschnitt: Wie entsteht dieser Baum? ---
+
+  const bildungsSchritte = [
+    {
+      titel: "Wurzel: Womit fangen wir an?",
+      kontext: "Alle 14 Trainingsfälle liegen noch ungeordnet vor. Der Code prüft der Reihe nach jede Spalte.",
+      kandidaten: [
+        { name: "Wetter", richtig: 10, gesamt: 14, gewinner: true },
+        { name: "Temperatur", richtig: 9, gesamt: 14 },
+        { name: "Luftfeuchtigkeit", richtig: 10, gesamt: 14 },
+        { name: "Wind", richtig: 9, gesamt: 14 },
+      ],
+      fazit: "Wetter und Luftfeuchtigkeit liegen mit 10 von 14 richtigen Mehrheits-Vorhersagen gleichauf. Da der Code die Spalten der Reihe nach durchgeht und nur bei einem echt besseren Wert wechselt, bleibt es bei der zuerst gefundenen besten Spalte: Wetter wird die erste Frage.",
+    },
+    {
+      titel: "Ast \u201eSonnig\u201c: Welche Frage als nächstes?",
+      kontext: "Nur noch die 5 Fälle mit Wetter = Sonnig sind übrig. Wetter scheidet als Kandidat aus, es wurde schon gefragt.",
+      kandidaten: [
+        { name: "Temperatur", richtig: 4, gesamt: 5 },
+        { name: "Luftfeuchtigkeit", richtig: 5, gesamt: 5, gewinner: true },
+        { name: "Wind", richtig: 3, gesamt: 5 },
+      ],
+      fazit: "Luftfeuchtigkeit trennt diese 5 Fälle perfekt: Bei \u201eHoch\u201c spielt niemand, bei \u201eNormal\u201c spielen alle. Damit ist keine weitere Frage mehr nötig – beide Äste werden direkt zu Blättern.",
+    },
+    {
+      titel: "Ast \u201eBewölkt\u201c: schon fertig",
+      kontext: "Alle 4 Fälle mit Wetter = Bewölkt haben denselben Zielwert.",
+      kandidaten: [],
+      rein: true,
+      fazit: "Die erste Abbruchbedingung greift sofort: \u201ealle übrigen Fälle gehören zur gleichen Klasse\u201c. Es wird gar keine Spalte mehr geprüft – der Ast endet direkt als Blatt \u201eja\u201c.",
+    },
+    {
+      titel: "Ast \u201eRegen\u201c: Welche Frage als nächstes?",
+      kontext: "Nur noch die 5 Fälle mit Wetter = Regen sind übrig.",
+      kandidaten: [
+        { name: "Temperatur", richtig: 3, gesamt: 5 },
+        { name: "Luftfeuchtigkeit", richtig: 3, gesamt: 5 },
+        { name: "Wind", richtig: 5, gesamt: 5, gewinner: true },
+      ],
+      fazit: "Wind trennt auch hier perfekt: Bei \u201eSchwach\u201c spielen alle, bei \u201eStark\u201c niemand. Auch dieser Ast ist damit fertig ausgebaut – der ganze Baum braucht nur zwei Ebenen.",
+    },
+  ];
+
+  let schrittIndex = 0;
+  const schrittPanel = document.getElementById("schritt-panel");
+  const schrittDots = document.getElementById("schritt-dots");
+  const btnZurueck = document.getElementById("schritt-zurueck");
+  const btnWeiter = document.getElementById("schritt-weiter");
+
+  bildungsSchritte.forEach((_, i) => {
+    const dot = document.createElement("button");
+    dot.setAttribute("aria-label", `Schritt ${i + 1}`);
+    dot.addEventListener("click", () => { schrittIndex = i; renderSchritt(); });
+    schrittDots.appendChild(dot);
+  });
+
+  function renderSchritt(){
+    const schritt = bildungsSchritte[schrittIndex];
+
+    let inhalt = `
+      <div class="schritt-titel">${schritt.titel}</div>
+      <p class="schritt-kontext">${schritt.kontext}</p>
+    `;
+
+    if (schritt.rein){
+      inhalt += `
+        <div class="rein-box"><span class="haken">✓</span> Reinheit erreicht – keine Spalte wird mehr bewertet.</div>
+      `;
+    } else {
+      schritt.kandidaten.forEach(k => {
+        const prozent = (k.richtig / k.gesamt) * 100;
+        inhalt += `
+          <div class="bar-row ${k.gewinner ? "gewinner" : ""}">
+            <span class="bar-name">${k.name}</span>
+            <span class="bar-track"><span class="bar-fill" style="width:${prozent}%"></span></span>
+            <span class="bar-wert">${k.richtig}/${k.gesamt}</span>
+          </div>
+        `;
+      });
+    }
+
+    inhalt += `<p class="schritt-fazit">${schritt.fazit}</p>`;
+    schrittPanel.innerHTML = inhalt;
+
+    [...schrittDots.children].forEach((dot, i) => {
+      dot.classList.toggle("aktiv", i === schrittIndex);
+    });
+    btnZurueck.disabled = schrittIndex === 0;
+    btnWeiter.disabled = schrittIndex === bildungsSchritte.length - 1;
+  }
+
+  btnZurueck.addEventListener("click", () => {
+    if (schrittIndex > 0){ schrittIndex--; renderSchritt(); }
+  });
+  btnWeiter.addEventListener("click", () => {
+    if (schrittIndex < bildungsSchritte.length - 1){ schrittIndex++; renderSchritt(); }
+  });
+
+  renderSchritt();
+</script>
+</body>
+</html>
