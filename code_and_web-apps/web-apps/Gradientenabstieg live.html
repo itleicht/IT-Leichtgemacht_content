@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Folge 13 – Gradientenabstieg live</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #14181C; --bg-panel: #1B2028; --bg-panel-raised: #232933;
+    --line: #333A45; --text: #E8E9EB; --text-dim: #9AA1AC;
+    --accent: #F5C4B3; --accent-strong: #D85A30;
+  }
+  *{ box-sizing: border-box; }
+  body{ margin:0; background: var(--bg); color: var(--text); font-family: "IBM Plex Sans", sans-serif; padding: 2.5rem 1.25rem 4rem; }
+  .wrap{ max-width: 1080px; margin: 0 auto; }
+  header{ margin-bottom: 1.8rem; }
+  h1{ font-family:"Space Grotesk",sans-serif; font-weight:700; font-size:clamp(1.3rem,3vw,1.85rem); margin:0 0 0.5rem; letter-spacing:-0.01em; }
+  header p{ color:var(--text-dim); max-width:70ch; line-height:1.55; margin:0; font-size:0.96rem; }
+
+  h2.section-titel{ font-family:"Space Grotesk",sans-serif; font-size:1.1rem; font-weight:600; margin:2.6rem 0 0.4rem; }
+  p.section-intro{ color:var(--text-dim); max-width:72ch; line-height:1.55; font-size:0.9rem; margin:0 0 1.1rem; }
+
+  .panel{ background:var(--bg-panel); border:1px solid var(--line); border-radius:10px; padding:1.4rem 1.5rem; }
+
+  .steuerleiste{ display:flex; align-items:center; gap:0.6rem; flex-wrap:wrap; margin-bottom:1.2rem; }
+  button.aktion{
+    font-family:"IBM Plex Sans",sans-serif; font-size:0.85rem; padding:0.5rem 0.95rem;
+    border-radius:7px; border:1px solid var(--line); background:var(--bg-panel-raised);
+    color:var(--text); cursor:pointer;
+  }
+  button.aktion:hover{ border-color:var(--accent); }
+  button.aktion.primaer{ background:var(--accent); color:#14181C; border-color:var(--accent); font-weight:500; }
+  button.aktion.primaer:hover{ opacity:0.9; }
+  button.aktion:disabled{ opacity:0.35; cursor:default; }
+
+  .statusleiste{ display:flex; gap:1rem; flex-wrap:wrap; margin-bottom:1.3rem; }
+  .statusleiste .karte{
+    background:var(--bg-panel-raised); border:1px solid var(--line); border-radius:8px;
+    padding:0.6rem 0.95rem; font-family:"IBM Plex Mono",monospace; min-width:130px;
+  }
+  .statusleiste .karte .label{ display:block; font-size:0.68rem; color:var(--text-dim); margin-bottom:0.25rem; }
+  .statusleiste .karte .wert{ font-size:1.1rem; color:var(--accent); }
+
+  svg{ width:100%; height:auto; display:block; }
+  .achse{ stroke: var(--line); stroke-width: 1.5; }
+  .achse-label{ font-family:"IBM Plex Mono",monospace; font-size:11px; fill:var(--text-dim); }
+  .datenpunkt{ fill: var(--text-dim); }
+  .datenpunkt.ausgewaehlt{ fill: var(--accent); }
+  .regressionslinie{ stroke: var(--accent); stroke-width: 2.5; fill:none; }
+
+  .tabelle-wrap{ overflow-x:auto; margin-top:1.4rem; }
+  table{ width:100%; border-collapse:collapse; font-family:"IBM Plex Mono",monospace; font-size:0.78rem; }
+  th, td{ padding:0.4rem 0.6rem; text-align:right; border-bottom:1px solid var(--line); color:var(--text-dim); white-space:nowrap; }
+  th:first-child, td:first-child{ text-align:left; }
+  th{ font-size:0.68rem; font-weight:500; color:var(--text-dim); }
+  tr.ausgewaehlt td{ color:var(--text); background: rgba(245,196,179,0.07); }
+  tr.ausgewaehlt td:first-child{ box-shadow: inset 3px 0 0 var(--accent); }
+  tr.summe td{ color:var(--accent); border-top:2px solid var(--line); border-bottom:none; font-weight:500; }
+  tr.tabelle-zeile{ cursor:pointer; }
+  tr.tabelle-zeile:hover td{ color: var(--text); }
+
+  .formel-box{
+    margin-top:1.3rem; padding:1rem 1.1rem; border-radius:8px;
+    background:var(--bg-panel-raised); border:1px solid var(--accent);
+    font-family:"IBM Plex Mono",monospace; font-size:0.85rem; line-height:1.9;
+  }
+  .formel-box .code{ color: var(--text-dim); }
+  .formel-box .hl{ color: var(--accent); }
+  .formel-box .zeilennr{ color:#6B7280; font-size:0.75rem; }
+
+  .update-box{
+    margin-top:1rem; padding:1rem 1.1rem; border-radius:8px;
+    background:var(--bg-panel-raised); border:1px solid var(--line);
+    font-family:"IBM Plex Mono",monospace; font-size:0.85rem; line-height:1.85;
+    color: var(--text-dim);
+  }
+  .update-box .hl{ color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>Wie steigung und achsenabschnitt wirklich entstehen</h1>
+    <p>Diese Seite rechnet den Gradientenabstieg aus eurem Folge-13-Code live nach – Schritt für Schritt, an denselben zwölf Wohnungsdaten. Du siehst genau, wie aus zwölf einzelnen Punkten am Ende zwei Zahlen werden.</p>
+  </header>
+
+  <h2 class="section-titel">Trainingsfortschritt</h2>
+  <p class="section-intro">Jeder Klick auf "Epoche" führt <em>eine</em> Runde der trainieren()-Schleife aus: Gradienten berechnen, Steigung und Achsenabschnitt aktualisieren. Beobachte, wie sich die Gerade an die Punkte anschmiegt.</p>
+
+  <div class="panel">
+    <div class="steuerleiste">
+      <button class="aktion primaer" id="btn-epoche1">+1 Epoche</button>
+      <button class="aktion" id="btn-epoche10">+10 Epochen</button>
+      <button class="aktion" id="btn-epoche100">+100 Epochen</button>
+      <button class="aktion" id="btn-reset">Zurücksetzen</button>
+    </div>
+
+    <div class="statusleiste">
+      <div class="karte"><span class="label">Epoche</span><span class="wert" id="stat-epoche">0</span></div>
+      <div class="karte"><span class="label">steigung</span><span class="wert" id="stat-steigung">0.0000</span></div>
+      <div class="karte"><span class="label">achsenabschnitt</span><span class="wert" id="stat-achsenabschnitt">0.0000</span></div>
+      <div class="karte"><span class="label">Fehler (MSE)</span><span class="wert" id="stat-fehler">–</span></div>
+    </div>
+
+    <svg viewBox="0 0 900 420" id="plot"></svg>
+  </div>
+
+  <h2 class="section-titel">Ein einzelner Punkt: die Zeilen 41 &amp; 42 in Aktion</h2>
+  <p class="section-intro">Klicke unten eine Zeile an. Die Formel-Box rechnet für genau diesen Wohnungs-Datenpunkt vor, was <code>gradienten_berechnen()</code> mit den aktuellen Werten von steigung und achsenabschnitt macht – bevor über alle zwölf Punkte gemittelt wird.</p>
+
+  <div class="panel">
+    <div class="tabelle-wrap">
+      <table id="tabelle">
+        <thead>
+          <tr>
+            <th>Wohnfläche (x)</th><th>Miete (y)</th><th>vorhergesagt</th><th>differenz</th>
+            <th>2·differenz·x</th><th>2·differenz</th>
+          </tr>
+        </thead>
+        <tbody id="tabelle-body"></tbody>
+      </table>
+    </div>
+
+    <div class="formel-box" id="formel-box"></div>
+
+    <div class="update-box" id="update-box"></div>
+  </div>
+
+</div>
+
+<script>
+  const daten = [
+    { x: 35,  y: 420 }, { x: 42,  y: 480 }, { x: 50,  y: 560 }, { x: 55,  y: 610 },
+    { x: 61,  y: 670 }, { x: 68,  y: 730 }, { x: 72,  y: 790 }, { x: 80,  y: 860 },
+    { x: 88,  y: 930 }, { x: 95,  y: 1000 }, { x: 102, y: 1080 }, { x: 110, y: 1150 },
+  ];
+  const lernrate = 0.00005;
+
+  let steigung = 0, achsenabschnitt = 0, epoche = 0;
+  let ausgewaehlterIndex = 0;
+
+  function vorhersage(x){ return steigung * x + achsenabschnitt; }
+
+  function berechneGradienten(){
+    const n = daten.length;
+    let steigungGradient = 0, achsenabschnittGradient = 0;
+    const punkte = daten.map(p => {
+      const vorher = vorhersage(p.x);
+      const differenz = vorher - p.y;
+      const beitragSteigung = 2 * differenz * p.x;
+      const beitragAchse = 2 * differenz;
+      steigungGradient += beitragSteigung;
+      achsenabschnittGradient += beitragAchse;
+      return { ...p, vorher, differenz, beitragSteigung, beitragAchse };
+    });
+    return {
+      punkte,
+      steigungGradient: steigungGradient / n,
+      achsenabschnittGradient: achsenabschnittGradient / n,
+    };
+  }
+
+  function fehlerBerechnen(){
+    const summe = daten.reduce((acc, p) => acc + (vorhersage(p.x) - p.y) ** 2, 0);
+    return summe / daten.length;
+  }
+
+  function formatiere(n, nachkomma = 2){
+    return n.toLocaleString("de-DE", { minimumFractionDigits: nachkomma, maximumFractionDigits: nachkomma });
+  }
+
+  // ---------- SVG-Plot ----------
+
+  const plot = document.getElementById("plot");
+  const xMin = 25, xMax = 118, yMin = 350, yMax = 1250;
+  const plotX0 = 60, plotX1 = 870, plotY0 = 370, plotY1 = 30;
+
+  function skaliereX(x){ return plotX0 + (x - xMin) / (xMax - xMin) * (plotX1 - plotX0); }
+  function skaliereY(y){ return plotY0 + (y - yMin) / (yMax - yMin) * (plotY1 - plotY0); }
+
+  function renderPlot(){
+    let svg = "";
+    // Achsen
+    svg += `<line class="achse" x1="${plotX0}" y1="${plotY0}" x2="${plotX1}" y2="${plotY0}"/>`;
+    svg += `<line class="achse" x1="${plotX0}" y1="${plotY0}" x2="${plotX0}" y2="${plotY1}"/>`;
+    svg += `<text class="achse-label" x="${(plotX0+plotX1)/2}" y="405" text-anchor="middle">Wohnfläche (m²)</text>`;
+    svg += `<text class="achse-label" x="20" y="${(plotY0+plotY1)/2}" text-anchor="middle" transform="rotate(-90 20 ${(plotY0+plotY1)/2})">Miete (€)</text>`;
+
+    // Regressionslinie
+    const y1 = vorhersage(xMin), y2 = vorhersage(xMax);
+    svg += `<path class="regressionslinie" d="M${skaliereX(xMin)},${skaliereY(Math.max(yMin,Math.min(yMax,y1)))} L${skaliereX(xMax)},${skaliereY(Math.max(yMin,Math.min(yMax,y2)))}"/>`;
+
+    // Datenpunkte
+    daten.forEach((p, i) => {
+      const klasse = i === ausgewaehlterIndex ? "datenpunkt ausgewaehlt" : "datenpunkt";
+      const radius = i === ausgewaehlterIndex ? 7 : 5;
+      svg += `<circle class="${klasse}" cx="${skaliereX(p.x)}" cy="${skaliereY(p.y)}" r="${radius}"/>`;
+    });
+
+    plot.innerHTML = svg;
+  }
+
+  // ---------- Tabelle + Formel-Box ----------
+
+  const tabelleBody = document.getElementById("tabelle-body");
+  const formelBox = document.getElementById("formel-box");
+  const updateBox = document.getElementById("update-box");
+
+  function renderTabelleUndFormel(grad){
+    tabelleBody.innerHTML = grad.punkte.map((p, i) => `
+      <tr class="tabelle-zeile ${i === ausgewaehlterIndex ? "ausgewaehlt" : ""}" data-index="${i}">
+        <td>${p.x}</td><td>${p.y}</td>
+        <td>${formatiere(p.vorher)}</td>
+        <td>${formatiere(p.differenz)}</td>
+        <td>${formatiere(p.beitragSteigung)}</td>
+        <td>${formatiere(p.beitragAchse)}</td>
+      </tr>
+    `).join("") + `
+      <tr class="summe">
+        <td>Summe / n = Gradient</td><td></td><td></td><td></td>
+        <td>${formatiere(grad.steigungGradient)}</td>
+        <td>${formatiere(grad.achsenabschnittGradient)}</td>
+      </tr>
+    `;
+
+    document.querySelectorAll("#tabelle-body tr.tabelle-zeile").forEach(tr => {
+      tr.addEventListener("click", () => {
+        ausgewaehlterIndex = parseInt(tr.dataset.index, 10);
+        render();
+      });
+    });
+
+    const p = grad.punkte[ausgewaehlterIndex];
+    formelBox.innerHTML =
+`<span class="zeilennr">Zeile 39-40</span>  vorhergesagt = <span class="hl">${formatiere(steigung,4)}</span> * ${p.x} + <span class="hl">${formatiere(achsenabschnitt,4)}</span> = <span class="hl">${formatiere(p.vorher)}</span>
+<span class="zeilennr">Zeile 40</span>      differenz = ${formatiere(p.vorher)} - ${p.y} = <span class="hl">${formatiere(p.differenz)}</span>
+<span class="zeilennr">Zeile 41</span>      2 * differenz * x = 2 * ${formatiere(p.differenz)} * ${p.x} = <span class="hl">${formatiere(p.beitragSteigung)}</span>
+<span class="zeilennr">Zeile 42</span>      2 * differenz = 2 * ${formatiere(p.differenz)} = <span class="hl">${formatiere(p.beitragAchse)}</span>`;
+
+    const neueSteigung = steigung - lernrate * grad.steigungGradient;
+    const neuerAchsenabschnitt = achsenabschnitt - lernrate * grad.achsenabschnittGradient;
+
+    updateBox.innerHTML =
+`Über alle 12 Punkte gemittelt (Summe / n):
+steigung_gradient = <span class="hl">${formatiere(grad.steigungGradient)}</span>
+achsenabschnitt_gradient = <span class="hl">${formatiere(grad.achsenabschnittGradient)}</span>
+
+Nächster Schritt beim Klick auf "Epoche":
+steigung = ${formatiere(steigung,4)} - ${lernrate} * ${formatiere(grad.steigungGradient)} = <span class="hl">${formatiere(neueSteigung,4)}</span>
+achsenabschnitt = ${formatiere(achsenabschnitt,4)} - ${lernrate} * ${formatiere(grad.achsenabschnittGradient)} = <span class="hl">${formatiere(neuerAchsenabschnitt,4)}</span>
+
+Diese beiden Werte sind dann die Grundlage für die nächste Epoche.`;
+  }
+
+  // ---------- Gesamt-Render ----------
+
+  function render(){
+    document.getElementById("stat-epoche").textContent = epoche;
+    document.getElementById("stat-steigung").textContent = formatiere(steigung, 4);
+    document.getElementById("stat-achsenabschnitt").textContent = formatiere(achsenabschnitt, 4);
+    document.getElementById("stat-fehler").textContent = formatiere(fehlerBerechnen(), 1);
+
+    renderPlot();
+    renderTabelleUndFormel(berechneGradienten());
+  }
+
+  function epochenSchritt(anzahl){
+    for (let i = 0; i < anzahl; i++){
+      const grad = berechneGradienten();
+      steigung -= lernrate * grad.steigungGradient;
+      achsenabschnitt -= lernrate * grad.achsenabschnittGradient;
+      epoche++;
+    }
+    render();
+  }
+
+  document.getElementById("btn-epoche1").addEventListener("click", () => epochenSchritt(1));
+  document.getElementById("btn-epoche10").addEventListener("click", () => epochenSchritt(10));
+  document.getElementById("btn-epoche100").addEventListener("click", () => epochenSchritt(100));
+  document.getElementById("btn-reset").addEventListener("click", () => {
+    steigung = 0; achsenabschnitt = 0; epoche = 0; ausgewaehlterIndex = 0;
+    render();
+  });
+
+  render();
+</script>
+</body>
+</html>
